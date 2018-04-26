@@ -42,11 +42,13 @@ if __name__ == "__main__":
     SCHEMA = Schema({
         'PID': [Or(None, And(Use(int), lambda n: 1 < n < 32768),
                    error='PID should be inteager within 1 < N < 32768')],
-        '--input': Or(None, And(Use(open, error='FILE should be readable'))),
+        '--input': Or(None, And(Use(open,
+                      error='input FILE should be readable'))),
         '--timeout': Or(None, And(Use(int), lambda n: 0 < n < 1000),
-                        error='--timeout=N should be integer 0 < N < 1000')})
+                        error='--timeout=N should be integer 0 < N < 1000'),
+        '--help': False})
     try:
-        ARGUMENTS = SCHEMA.validate(ARGUMENTS)
+        arg_validator = SCHEMA.validate(ARGUMENTS)
     except SchemaError as _e:
         exit(_e)
 
