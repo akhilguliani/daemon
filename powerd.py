@@ -40,13 +40,18 @@ def main(arg1):
     print(arg1)
     printProcess(arg1['PID'])
     _ea = EnergyTracker(100)
+    istat = getSysStats()
+    istat['energy'] = _ea.get_update_energy()
+    _sys_stats = StatsTracker(Entity.System, istat)
 
     while 1:
         prev_energy = _ea.get_update_energy()
         time.sleep(int(arg1['--interval']))
-        #eA.updateEnergy()
-        print(_ea.get_power(prev_energy, int(arg1['--interval'])))
-        print(getSysStats(0))
+        #print(_ea.get_power(prev_energy, int(arg1['--interval'])))
+        istat = getSysStats()
+        istat['energy'] = _ea.get_update_energy()
+        ostat = _sys_stats.update_stat(istat)
+        print(ostat['temps'])
 
 
 ##########################

@@ -120,26 +120,24 @@ class StatsTracker:
     stat = None
     entity = None
 
-    def __init__(self, entity, i_time, i_freq, i_temp, i_energy):
+    def __init__(self, entity, i_stat):
         self.stat = {}
         self.entity = entity
-        self.stat['time'] = i_time
-        self.stat['temp'] = i_temp
+        self.stat = i_stat
         ## get the right factor
         if self.entity == Entity.System:
-            self.stat['factor'] == 1
+            self.stat['factor'] = 1
         else:
             self.stat['factor'] = (i_time[0]+i_time[1])/(getSysStats()['time'][0]+getSysStats()['time'][2])
-        self.stat['energy'] = i_energy
 
-    def update_stat(self,i_time,i_freq,i_temp,i_energy):
-        self.stat['time'] = i_time
-        self.stat['temp'] = i_temp
+    def update_stat(self,i_stat):
+        for key in i_stat.keys():
+            self.stat[key] = i_stat[key]
         ## get the right factor
         ## Only accounting for process time without children
         if self.entity != Entity.System:
             self.stat['factor'] = (i_time[0]+i_time[1])/(getSysStats()['time'][0]+getSysStats()['time'][2])
-        self.stat['energy'] = i_energy
+        return self.stat
 
     def get_stat(self, item=None):
         if item != None:
@@ -148,8 +146,7 @@ class StatsTracker:
 
     def get_stat_diff(self, prev_stat,item=None):
         diff_stat = {}
-
-
+        ## write stat_diff
         if item != None:
             return diff_stat[item]
         return self.stat
