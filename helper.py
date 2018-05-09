@@ -109,6 +109,9 @@ class EnergyTracker:
         return (self.energy-prev_energy)/(interval*self.MILLI)
 
 class Entity(Enum):
+    """
+    Tracked entity recognizer
+    """
     System = 1
     Process = 2
 
@@ -128,7 +131,9 @@ class StatsTracker:
         if self.entity == Entity.System:
             self.stat['factor'] = 1
         else:
-            self.stat['factor'] = (i_time[0]+i_time[1])/(getSysStats()['time'][0]+getSysStats()['time'][2])
+            _t = i_stat['time']
+            _st = getSysStats()['time']
+            self.stat['factor'] = (_t[0]+_t[1])/_st[0]+_st[2]
 
     def update_stat(self,i_stat):
         for key in i_stat.keys():
@@ -136,7 +141,10 @@ class StatsTracker:
         ## get the right factor
         ## Only accounting for process time without children
         if self.entity != Entity.System:
-            self.stat['factor'] = (i_time[0]+i_time[1])/(getSysStats()['time'][0]+getSysStats()['time'][2])
+            _t = i_stat['time']
+            _st = getSysStats()['time']
+            self.stat['factor'] = (_t[0]+_t[1])/_st[0]+_st[2]
+
         return self.stat
 
     def get_stat(self, item=None):
@@ -152,29 +160,30 @@ class StatsTracker:
         return self.stat
 
 
-
 class ProcessTracker(StatsTracker):
     """
     extending the stats tracker to track a process
     """
-    _pid = None
-    _name = None
-    _affinity = None
-    _priority = None
+    pid = None
+    name = None
+    core = None
+    procstat = None
 
     def __init__(self, i_stat, p_stat):
-        super().__init__(Entity.Process, p_stat['cpu_times'], i_stat['freq'],
-                         i_stat['temp'], i_stat['energy'])
-        self._pid = p_stat['pid']
-        self._name = p_stat['name']
-        self._affinity = p_stat['cpu_affinity']
-        self._priority = p_stat['nice']
+        i_stat['time'] = p_stat['cpu_times']
+        super().__init__(Entity.Process, i_stat)
+        self.pid = p_stat['pid']
+        self.name = p_stat['name']
+        self.core = p_stat['cpu_num']
+        self.procstat = p_stat
 
     def update(self, i_stat, p_stat):
-        self.update_stat(p_stat['cpu_times'], i_stat['freq'], i_stat['temp'],
-                         i_stat['energy'])
-        self._pid = p_stat['pid']
-        self._name = p_stat['name']
-        self._affinity = p_stat['cpu_affinity']
-        self._priority = p_stat['nice']
+        if self.name != p_stat['name']:
+            return
+        i_stat['time'] = p_stat['cpu_times']
+        self.update_stat(i_stat)
+        self.pid = p_stat['pid']
+        self.name = p_stat['name']
+        self.core = p_stat['cpu_num']
+        self.procstat = p_stat
 

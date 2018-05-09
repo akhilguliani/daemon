@@ -14,19 +14,19 @@ Options:
     --interval=<seconds>   max amount of time in minutes to keep the daemon alive
 """
 
-from docopt import docopt
-from schema import Schema, And, Or, Use, SchemaError
 import time
 import signal
 import sys
+from docopt import docopt
+from schema import Schema, And, Or, Use, SchemaError
+
 from helper import *
 
-
 def signal_handler(signal, frame):
+    """ SIGINT Handler for gracefull exit"""
     print('\nExiting Daemon')
     # Do cleanup in the future
     sys.exit(0)
-
 
 def main(arg1):
     """
