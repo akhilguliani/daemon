@@ -36,6 +36,17 @@ def getSysStats(cpu=None):
     # return everything
     return sys_stats
 
+def getProcess(_pids=None):
+    """
+    Iterate over all process and print proc vals
+    """
+    p_dict = {}
+    for pid in _pids:
+        print(pid)
+        _p = psutil.Process(pid)
+        p_dict[pid] = _p.as_dict()
+    # print(p_list)
+    return p_dict
 
 def printProcess(_pids=None):
     """
@@ -45,6 +56,7 @@ def printProcess(_pids=None):
         print(pid)
         _p = psutil.Process(int(pid))
         print(_p.as_dict())
+
 
 ### Classes
 

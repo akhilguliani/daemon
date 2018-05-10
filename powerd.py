@@ -28,6 +28,27 @@ def signal_handler(signal, frame):
     # Do cleanup in the future
     sys.exit(0)
 
+def init_proc_tracker(_pids, i_stat):
+    """
+    Iterate over all process and setup proc_tracker
+    """
+    if _pids == None:
+        return None
+    p_dict = {}
+    for pid in _pids:
+        print(pid)
+        _p = psutil.Process(pid)
+        p_dict[pid] = ProcessTracker(i_stat, _p.as_dict())
+    return p_dict
+
+def print_tracker(p_dict):
+    for key in p_dict.keys():
+        print(p_dict[key].entity)
+        print(p_dict[key].stat)
+        print(p_dict[key].procstat)
+        print("\n********\n")
+
+
 def main(arg1):
     """
     The main funtion loop.
@@ -38,11 +59,13 @@ def main(arg1):
         commandline arguments from
     """
     print(arg1)
-    printProcess(arg1['PID'])
+    pids = list(map(int, arg1['PID']))
     _ea = EnergyTracker(100)
     istat = getSysStats()
     istat['energy'] = _ea.get_update_energy()
     _sys_stats = StatsTracker(Entity.System, istat)
+    proc_dict = init_proc_tracker(pids, istat)
+    print_tracker(proc_dict)
 
     while 1:
         prev_energy = _ea.get_update_energy()
