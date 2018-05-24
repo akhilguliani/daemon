@@ -20,7 +20,9 @@ import sys
 from docopt import docopt
 from schema import Schema, And, Or, Use, SchemaError
 
+from frequency import *
 from helper import *
+
 
 def signal_handler(signal, frame):
     """ SIGINT Handler for gracefull exit"""
@@ -48,77 +50,50 @@ def print_tracker(p_dict):
         print(p_dict[key].procstat)
         print("\n********\n")
 
-def get_freq_bounds():
-    bounds = [0, 0]
-    freq_file = open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq", 'r')
-    bounds[1] = int(freq_file.read())
-    freq_file.close()
-    freq_file = open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq", 'r')
-    bounds[0] = int(freq_file.read())
-    freq_file.close()
-    return bounds
-
-def set_gov_userspace():
-    # Add check for intel_cpufreq
-    driver_file = open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_driver")
-    driver = driver_file.read()
-    driver_file.close()
-
-    if "cpufreq" in driver:
-        for i in range(psutil.cpu_count()):
-            gov_file = "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_governor" % i
-            gfd = open(gov_file, 'w')
-            gfd.write("userspace")
-            gfd.close()
-    else:
-        print("Unspported Driver: please enable intel/acpi_cpufreq from kerenl cmdline")
-
-def read_freq(cpu=0):
-    f_file = "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_cur_freq" % cpu
-    freq_file = open(f_file)
-    ret_val = freq_file.read()
-    freq_file.close()
-    return ret_val
-
-def write_freq(val, cpu=0):
-    bounds = get_freq_bounds()
-    if val <= bounds[1] and val >= bounds[0]:
-        print("Changing Freq to ", str(val))
-        f_file = "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_setspeed" % cpu
-        freq_file = open(f_file, 'w')
-        freq_file.write(str(val))
-        freq_file.close()
-    return
-
-def power_at_freq(freq):
-    # freq is represented as 8 = 800MHz; 42 = 4200MHz
-    return (0.0211*((freq/100000)**2) - (0.4697)*(freq/100000)+ 7.7535)*1000
-
-def freq_at_power(power):
-    return int(-0.0773*((power/1000)**2)+ 3.7436*(power/1000) - 4.6404)*100000
-
-def reduce_freq(target_power):
+def change_freq(target_power, increase=False):
     # power differential to freq reduction factor
     new_freq = freq_at_power(target_power)
     old_freq = int(read_freq())
+    # print(new_freq, old_freq, target_power)
 
-    if old_freq - new_freq <= 100:
+    if abs(old_freq - new_freq) <= 1000:
         return
 
     new_power = power_at_freq(new_freq)
-    while(new_power > target_power):
-        new_freq = new_freq - 100000
-        new_power = power_at_freq(new_freq)
-        print(new_freq, old_freq, new_power)
+
+    if increase:
+        while new_power < target_power:
+            new_freq = new_freq + 100000
+            new_power = power_at_freq(new_freq)
+            # print(new_freq, old_freq, new_power, target_power)
+    else:
+        while new_power > target_power:
+            new_freq = new_freq - 100000
+            new_power = power_at_freq(new_freq)
+            # print(new_freq, old_freq, new_power)
+
     # WARN: Hardecoded cpu numbers below
     for i in range(psutil.cpu_count()):
         write_freq(new_freq, i)
 
-def keep_limit(curr_power, limit=20000):
-    # check current
+def keep_limit(curr_power, limit=20000, first_limit=True):
+    new_limit = limit
+
+    if not first_limit:
+        if curr_power - limit > 0 and new_limit > 5000:
+            new_limit = new_limit - abs(curr_power - new_limit)/4
+            #new_limit = new_limit - 1000
+        elif curr_power - limit < 0 and new_limit > 5000:
+            new_limit = new_limit + abs(curr_power - new_limit)/4
+            #new_limit = new_limit + 1000
+
+    # print("In keep_limit ", limit)
     if curr_power > limit:
         # reduce frequency
-        reduce_freq(limit)
+        change_freq(new_limit)
+    elif curr_power < limit:
+        # print("Increase")
+        change_freq(new_limit, increase=False)
     return
 
 def main(arg1):
@@ -150,15 +125,13 @@ def main(arg1):
     while 1:
         curr_power = _ea.get_power(prev_energy, interval)
         print(curr_power)
-#        if not first_limit:
-#            if curr_power > set_limit:
-#                set_limit = set_limit - abs(curr_power - set_limit)
         istat = getSysStats()
         istat['energy'] = _ea.get_update_energy()
         ostat = _sys_stats.update_stat(istat)
-        print(ostat['freqs'])
+        # print(ostat['freqs'])
         print()
-        keep_limit(curr_power, set_limit)
+        keep_limit(curr_power, set_limit, first_limit)
+        print(" ---- \n")
         first_limit = False
         prev_energy = _ea.get_update_energy()
         time.sleep(interval)
