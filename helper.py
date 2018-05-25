@@ -73,7 +73,7 @@ class EnergyTracker:
     socket = 0
     energy = 0
     share = 0
-    energy_loc = "/sys/devices/virtual/powercap/intel-rapl/intel-rapl:"+str(socket)+"/"
+    energy_loc = "/sys/devices/virtual/powercap/intel-rapl/intel-rapl:"+str(socket)+"/"+"intel-rapl:"+str(socket)+":0/"
 
     def __init__(self, share):
         max_enrgy_file = open(self.energy_loc+"max_energy_range_uj", 'r')

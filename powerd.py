@@ -63,14 +63,22 @@ def change_freq(target_power, increase=False):
 
     if increase:
         while new_power < target_power:
+            old_power = power_at_freq(new_freq)
             new_freq = new_freq + 100000
             new_power = power_at_freq(new_freq)
+            if new_power == old_power:
+                new_freq =  new_freq - 100000
+                break
             # print(new_freq, old_freq, new_power, target_power)
     else:
         while new_power > target_power:
+            old_power = power_at_freq(new_freq)
             new_freq = new_freq - 100000
             new_power = power_at_freq(new_freq)
             # print(new_freq, old_freq, new_power)
+            if new_power == old_power:
+                new_freq =  new_freq + 100000
+                break
 
     # WARN: Hardecoded cpu numbers below
     for i in range(psutil.cpu_count()):
@@ -93,7 +101,7 @@ def keep_limit(curr_power, limit=20000, first_limit=True):
         change_freq(new_limit)
     elif curr_power < limit:
         # print("Increase")
-        change_freq(new_limit, increase=False)
+        change_freq(new_limit, increase=True)
     return
 
 def main(arg1):
