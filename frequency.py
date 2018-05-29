@@ -43,16 +43,36 @@ def write_freq(val, cpu=0):
         freq_file.close()
     return
 
+## Functions for Skylake gold in cloudlab
 def power_at_freq(in_freq):
     # freq is represented as 8 = 800MHz; 42 = 4200MHz
     bounds = get_freq_bounds()
     if in_freq <= bounds[1] and in_freq >= bounds[0]:
         freq = in_freq/100000
     elif in_freq < bounds[0]:
-        freq = 8
+        freq = bounds[0]/100000
     elif in_freq > bounds[1]:
-        freq = 42
+        freq = bounds[1]/100000
+    # 0.012x2 - 0.1714x + 42.046
+    return (0.012*(freq**2) - 0.1717*freq + 42.046)*1000
+
+def freq_at_power(power):
+    # -0.1661x2 + 17.797x - 440.35
+    return int(-0.1661*((power/1000)**2)+ 17.797*(power/1000) - 440.35)*100000
+
+## Functions for ADSL-SL01
+"""
+def power_at_freq(in_freq):
+    # freq is represented as 8 = 800MHz; 42 = 4200MHz
+    bounds = get_freq_bounds()
+    if in_freq <= bounds[1] and in_freq >= bounds[0]:
+        freq = in_freq/100000
+    elif in_freq < bounds[0]:
+        freq = bounds[0]/100000
+    elif in_freq > bounds[1]:
+        freq = bounds[1]/100000
     return (0.0211*(freq**2) - 0.4697*freq + 7.7535)*1000
 
 def freq_at_power(power):
     return int(-0.0773*((power/1000)**2)+ 3.7436*(power/1000) - 4.6404)*100000
+"""

@@ -84,7 +84,7 @@ def change_freq(target_power, increase=False):
     for i in range(psutil.cpu_count()):
         write_freq(new_freq, i)
 
-def keep_limit(curr_power, limit=20000, first_limit=True):
+def keep_limit(curr_power, limit=50000, first_limit=True):
     new_limit = limit
 
     if not first_limit:
@@ -125,7 +125,7 @@ def main(arg1):
     set_gov_userspace()
 
     interval = int(arg1['--interval'])
-    set_limit = 20000
+    set_limit = 50000
     first_limit = True
     prev_energy = _ea.get_update_energy()
     time.sleep(interval)
