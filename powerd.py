@@ -34,7 +34,7 @@ def init_proc_tracker(_pids, i_stat):
     """
     Iterate over all process and setup proc_tracker
     """
-    if _pids == None:
+    if _pids is None:
         return None
     p_dict = {}
     for pid in _pids:
@@ -67,7 +67,7 @@ def change_freq(target_power, increase=False):
             new_freq = new_freq + 100000
             new_power = power_at_freq(new_freq)
             if new_power == old_power:
-                new_freq =  new_freq - 100000
+                new_freq = new_freq - 100000
                 break
             # print(new_freq, old_freq, new_power, target_power)
     else:
@@ -77,32 +77,71 @@ def change_freq(target_power, increase=False):
             new_power = power_at_freq(new_freq)
             # print(new_freq, old_freq, new_power)
             if new_power == old_power:
-                new_freq =  new_freq + 100000
+                new_freq = new_freq + 100000
                 break
 
     # WARN: Hardecoded cpu numbers below
     for i in range(psutil.cpu_count()):
         write_freq(new_freq, i)
 
+    return
+
+def change_freq_std(target_pwr, current_pwr, increase=False):
+    # power differential to freq reduction factor
+    new_freq = int(read_freq())
+
+    power_diff = abs(current_pwr - target_pwr)
+    step = 100000
+
+    # Select the right step size
+    if power_diff < 700:
+        # to close better settle than oscillate
+        return
+    elif power_diff > 3000 and power_diff < 10000:
+        step = 200000
+    elif power_diff > 10000:
+        step = 500000
+
+    if increase:
+        new_freq = new_freq + step
+    else:
+        new_freq = new_freq - step
+
+    # WARN: Hardecoded cpu numbers below
+    for i in range(psutil.cpu_count()):
+        write_freq(new_freq, i)
+
+    return
+
+
 def keep_limit(curr_power, limit=20000, first_limit=True):
     new_limit = limit
 
     if not first_limit:
         if curr_power - limit > 0 and new_limit > 5000:
-            new_limit = new_limit - abs(curr_power - new_limit)/4
+            new_limit = new_limit - abs(curr_power - new_limit)/2
             #new_limit = new_limit - 1000
         elif curr_power - limit < 0 and new_limit > 5000:
             new_limit = new_limit + abs(curr_power - new_limit)/4
-            #new_limit = new_limit + 1000
+#            #new_limit = new_limit + 1000
 
     # print("In keep_limit ", limit)
-    if curr_power > limit:
-        # reduce frequency
-        change_freq(new_limit)
-    elif curr_power < limit:
-        # print("Increase")
-        change_freq(new_limit, increase=True)
+        if curr_power > limit:
+            # reduce frequency
+            change_freq_std(new_limit, curr_power)
+        elif curr_power < limit:
+            # print("Increase")
+            change_freq_std(new_limit, curr_power, increase=True)
+    else:
+        # First Step
+        if curr_power > limit:
+            # reduce frequency
+            change_freq(new_limit)
+        elif curr_power < limit:
+            # print("Increase")
+            change_freq(new_limit, increase=True)
     return
+
 
 def main(arg1):
     """
@@ -137,7 +176,7 @@ def main(arg1):
         istat['energy'] = _ea.get_update_energy()
         ostat = _sys_stats.update_stat(istat)
         # print(ostat['freqs'])
-        print()
+        print(ostat['temps'])
         keep_limit(curr_power, set_limit, first_limit)
         print(" ---- \n")
         first_limit = False
