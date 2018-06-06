@@ -1,6 +1,12 @@
 import psutil
 import time
 
+ttrack = {}
+temps = (psutil.sensors_temperatures())['coretemp']
+for temp in temps:
+    ttrack[getattr(temp,'label')] = getattr(temp,'current')
+    print(temp)
+
 def diff_pcputimes(t1, t2):
     print(type(t1))
     assert t1._fields == t2._fields, (t1, t2)
@@ -30,9 +36,25 @@ while True:
 
     time.sleep(1)
     print("\n************\n")
-    print(psutil.cpu_percent(percpu=True))
+    # print(psutil.cpu_percent(percpu=True))
+    # print(psutil.sensors_temperatures())
+    temps = (psutil.sensors_temperatures())['coretemp']
+    for temp in temps:
+        ttrack[getattr(temp,'label')] += getattr(temp,'current')
+        ttrack[getattr(temp,'label')] = ttrack[getattr(temp,'label')]/2
+        #print(temp)
+    print(ttrack)
+
+    mintemp = min(ttrack.values())
+    maxtemp = max(ttrack.values())
+    intensity = {}
+    for key in ttrack.keys():
+        intensity[key] = round((ttrack[key] - mintemp) / (maxtemp - mintemp),2)
+    print(intensity)
+    print("______")
+
     a = get_all_busy_time()
-    dtime = [ i-j for i,j in zip(a,prev) ]
+    dtime = [ max(round(i-j, 2) , 0) for i,j in zip(a,prev) ]
     print(dtime)
     new_stats = {}
     for _proc in psutil.process_iter():
