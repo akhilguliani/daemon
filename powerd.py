@@ -23,8 +23,7 @@ from schema import Schema, And, Or, Use, SchemaError
 from frequency import *
 from helper import *
 
-
-def signal_handler(signal, frame):
+def signal_handler(_signal, _frame):
     """ SIGINT Handler for gracefull exit"""
     print('\nExiting Daemon')
     # Do cleanup in the future
@@ -44,13 +43,15 @@ def init_proc_tracker(_pids, i_stat):
     return p_dict
 
 def print_tracker(p_dict):
-    for key in p_dict.keys():
-        print(p_dict[key].entity)
-        print(p_dict[key].stat)
-        print(p_dict[key].procstat)
+    """ Prinitng the proc dictionary """
+    for value in p_dict.values():
+        print(value.entity)
+        print(value.stat)
+        print(value.procstat)
         print("\n********\n")
 
 def change_freq(target_power, increase=False):
+    """ Update frequency based on target power and power model """
     # power differential to freq reduction factor
     new_freq = freq_at_power(target_power)
     old_freq = int(read_freq())
@@ -87,6 +88,7 @@ def change_freq(target_power, increase=False):
     return
 
 def change_freq_std(target_pwr, current_pwr, increase=False):
+    """ Update frequency based on target power and actulal power value """
     # power differential to freq reduction factor
     new_freq = int(read_freq())
 
@@ -94,7 +96,7 @@ def change_freq_std(target_pwr, current_pwr, increase=False):
     step = 100000
 
     # Select the right step size
-    if power_diff < 700:
+    if power_diff < 900:
         # to close better settle than oscillate
         return
     elif power_diff > 3000 and power_diff < 10000:
@@ -113,8 +115,8 @@ def change_freq_std(target_pwr, current_pwr, increase=False):
 
     return
 
-
 def keep_limit(curr_power, limit=20000, first_limit=True):
+    """ Follow the power limit """
     new_limit = limit
 
     if not first_limit:
