@@ -34,7 +34,11 @@ def main():
 
     set_gov_userspace()
 
-    print(get_freq_bounds())
+    for i in cpus:
+        print(get_freq_bounds())
+
+    first = True
+    old_freq = None
 
     while(True):
         before = PerCoreTracker(dict(zip(cpus, get_percore_energy(cpus))))
@@ -42,7 +46,12 @@ def main():
         after = PerCoreTracker(dict(zip(cpus, get_percore_energy(cpus))))
         delta = update_delta(before, after)
         track_energy = track_energy + delta.scalar_mul(energy_unit)
-        print(round(track_energy,2), "\n", round(delta,2), "\n________")
+        print(round(track_energy,3), "\n", round(delta,3), "\n________")
+
+        curr_power = delta[0]*1000
+        old_freq = keep_limit(curr_power, limit=3000, cpu=0, last_freq=old_freq, first_limit=first)
+        first = False
+
 
 ## Starting point
 if __name__ == "__main__":

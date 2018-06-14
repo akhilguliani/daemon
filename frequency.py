@@ -3,12 +3,12 @@ import psutil
 import subprocess
 import time
 
-def get_freq_bounds():
+def get_freq_bounds(cpu=0):
     bounds = [0, 0]
-    freq_file = open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq", 'r')
+    freq_file = open("/sys/devices/system/cpu/cpu%d/cpufreq/scaling_max_freq" % cpu, 'r')
     bounds[1] = int(freq_file.read())
     freq_file.close()
-    freq_file = open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq", 'r')
+    freq_file = open("/sys/devices/system/cpu/cpu%d/cpufreq/scaling_min_freq" % cpu, 'r')
     bounds[0] = int(freq_file.read())
     freq_file.close()
     return bounds
@@ -28,12 +28,16 @@ def set_gov_userspace():
     else:
         print("Unspported Driver: please enable intel/acpi_cpufreq from kerenl cmdline")
 
+def quantize(value):
+    ret = int(value / 100000)
+    return ret*100000
+
 def read_freq(cpu=0):
     f_file = "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_cur_freq" % cpu
     freq_file = open(f_file)
     ret_val = freq_file.read()
     freq_file.close()
-    return ret_val
+    return str(quantize(int(ret_val)))
 
 def write_freq(val, cpu=0):
     bounds = get_freq_bounds()
@@ -58,8 +62,8 @@ def power_at_freq(in_freq):
 
 def freq_at_power(power):
     return int(-0.0773*((power/1000)**2)+ 3.7436*(power/1000) - 4.6404)*100000
-    
-def change_freq(target_power, increase=False):
+
+def change_freq(target_power, cpu=0, increase=False):
     """ Update frequency based on target power and power model """
     # power differential to freq reduction factor
     new_freq = freq_at_power(target_power)
@@ -79,7 +83,6 @@ def change_freq(target_power, increase=False):
             if new_power == old_power:
                 new_freq = new_freq - 100000
                 break
-            # print(new_freq, old_freq, new_power, target_power)
     else:
         while new_power > target_power:
             old_power = power_at_freq(new_freq)
@@ -90,17 +93,21 @@ def change_freq(target_power, increase=False):
                 new_freq = new_freq + 100000
                 break
 
+    print("change_freq:", new_freq, old_freq, new_power, target_power)
     # WARN: Hardecoded cpu numbers below
-    for i in range(psutil.cpu_count()):
-        write_freq(new_freq, i)
+    #for i in range(psutil.cpu_count()):
+    write_freq(new_freq, cpu)
 
     return
 
-def change_freq_std(target_pwr, current_pwr, increase=False):
+def change_freq_std(target_pwr, current_pwr, old_freq=None, cpu=0, increase=False):
     """ Update frequency based on target power and actulal power value """
     # power differential to freq reduction factor
-    new_freq = int(read_freq())
-
+    new_freq = None
+    if old_freq == None:
+        new_freq = int(read_freq(cpu))
+    else:
+        new_freq = old_freq
     power_diff = abs(current_pwr - target_pwr)
     step = 100000
 
@@ -109,7 +116,7 @@ def change_freq_std(target_pwr, current_pwr, increase=False):
         # to close better settle than oscillate
         return
     elif power_diff > 3000 and power_diff < 10000:
-        step = 200000
+        step = 100000
     elif power_diff > 10000:
         step = 500000
 
@@ -118,38 +125,39 @@ def change_freq_std(target_pwr, current_pwr, increase=False):
     else:
         new_freq = new_freq - step
 
+    print("ch_freq_std ", target_pwr, new_freq, increase, power_diff)
     # WARN: Hardecoded cpu numbers below
-    for i in range(psutil.cpu_count()):
-        write_freq(new_freq, i)
+    write_freq(new_freq, cpu)
 
-    return
+    return new_freq
 
-def keep_limit(curr_power, limit=20000, first_limit=True):
+def keep_limit(curr_power, limit=10000, cpu=0, last_freq=None, first_limit=True):
     """ Follow the power limit """
     new_limit = limit
+    old_freq = None
 
     if not first_limit:
-        if curr_power - limit > 0 and new_limit > 5000:
+        if curr_power - limit > 0 and new_limit > 1000:
             new_limit = new_limit - abs(curr_power - new_limit)/2
             #new_limit = new_limit - 1000
-        elif curr_power - limit < 0 and new_limit > 5000:
+        elif curr_power - limit < 0 and new_limit > 1000:
             new_limit = new_limit + abs(curr_power - new_limit)/4
 #            #new_limit = new_limit + 1000
 
     # print("In keep_limit ", limit)
         if curr_power > limit:
             # reduce frequency
-            change_freq_std(new_limit, curr_power)
+            old_freq = change_freq_std(new_limit, curr_power, last_freq, cpu)
         elif curr_power < limit:
             # print("Increase")
-            change_freq_std(new_limit, curr_power, increase=True)
+            old_freq = change_freq_std(new_limit, curr_power, last_freq, cpu, increase=True)
     else:
         # First Step
         if curr_power > limit:
             # reduce frequency
-            change_freq(new_limit)
+            change_freq(new_limit, cpu)
         elif curr_power < limit:
             # print("Increase")
-            change_freq(new_limit, increase=True)
-    return
+            change_freq(new_limit, cpu, increase=True)
+    return old_freq
 
