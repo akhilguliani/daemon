@@ -7,6 +7,7 @@ import psutil
 from topology import cpu_tree
 from msr import AMD_MSR_CORE_ENERGY, readmsr, get_percore_energy, get_units
 from tracker import PerCoreTracker, update_delta
+from frequency import *
 
 def signal_handler(_signal, _frame):
     """ Handle SIGINT"""
@@ -21,14 +22,20 @@ def check_for_sudo_and_msr():
         subprocess.run(["modprobe", "msr"])
 
 def main():
+    # get cpu topology
     tree = cpu_tree()
-    cpus = [list(tree[0][i].keys())[0] for i in range(psutil.cpu_count(logical=False))]
-    for i in cpus:
-        print(format(readmsr(AMD_MSR_CORE_ENERGY, i), '08X'))
-    zeros = [0 for i in cpus]
 
-    track_energy = PerCoreTracker(dict(zip(cpus,zeros)))
+    # get cpu id's as a list
+    cpus = [list(tree[0][i].keys())[0] for i in range(psutil.cpu_count(logical=False))]
+
+    track_energy = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
+
     energy_unit = get_units()
+
+    set_gov_userspace()
+
+    print(get_freq_bounds())
+
     while(True):
         before = PerCoreTracker(dict(zip(cpus, get_percore_energy(cpus))))
         sleep(1)
