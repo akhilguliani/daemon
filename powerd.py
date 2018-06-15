@@ -20,8 +20,8 @@ import sys
 from docopt import docopt
 from schema import Schema, And, Or, Use, SchemaError
 
-from frequency import *
 from helper import *
+from frequency import *
 
 def signal_handler(_signal, _frame):
     """ SIGINT Handler for gracefull exit"""
@@ -50,99 +50,6 @@ def print_tracker(p_dict):
         print(value.procstat)
         print("\n********\n")
 
-def change_freq(target_power, increase=False):
-    """ Update frequency based on target power and power model """
-    # power differential to freq reduction factor
-    new_freq = freq_at_power(target_power)
-    old_freq = int(read_freq())
-    # print(new_freq, old_freq, target_power)
-
-    if abs(old_freq - new_freq) <= 1000:
-        return
-
-    new_power = power_at_freq(new_freq)
-
-    if increase:
-        while new_power < target_power:
-            old_power = power_at_freq(new_freq)
-            new_freq = new_freq + 100000
-            new_power = power_at_freq(new_freq)
-            if new_power == old_power:
-                new_freq = new_freq - 100000
-                break
-            # print(new_freq, old_freq, new_power, target_power)
-    else:
-        while new_power > target_power:
-            old_power = power_at_freq(new_freq)
-            new_freq = new_freq - 100000
-            new_power = power_at_freq(new_freq)
-            # print(new_freq, old_freq, new_power)
-            if new_power == old_power:
-                new_freq = new_freq + 100000
-                break
-
-    # WARN: Hardecoded cpu numbers below
-    for i in range(psutil.cpu_count()):
-        write_freq(new_freq, i)
-
-    return
-
-def change_freq_std(target_pwr, current_pwr, increase=False):
-    """ Update frequency based on target power and actulal power value """
-    # power differential to freq reduction factor
-    new_freq = int(read_freq())
-
-    power_diff = abs(current_pwr - target_pwr)
-    step = 100000
-
-    # Select the right step size
-    if power_diff < 900:
-        # to close better settle than oscillate
-        return
-    elif power_diff > 3000 and power_diff < 10000:
-        step = 200000
-    elif power_diff > 10000:
-        step = 500000
-
-    if increase:
-        new_freq = new_freq + step
-    else:
-        new_freq = new_freq - step
-
-    # WARN: Hardecoded cpu numbers below
-    for i in range(psutil.cpu_count()):
-        write_freq(new_freq, i)
-
-    return
-
-def keep_limit(curr_power, limit=20000, first_limit=True):
-    """ Follow the power limit """
-    new_limit = limit
-
-    if not first_limit:
-        if curr_power - limit > 0 and new_limit > 5000:
-            new_limit = new_limit - abs(curr_power - new_limit)/2
-            #new_limit = new_limit - 1000
-        elif curr_power - limit < 0 and new_limit > 5000:
-            new_limit = new_limit + abs(curr_power - new_limit)/4
-#            #new_limit = new_limit + 1000
-
-    # print("In keep_limit ", limit)
-        if curr_power > limit:
-            # reduce frequency
-            change_freq_std(new_limit, curr_power)
-        elif curr_power < limit:
-            # print("Increase")
-            change_freq_std(new_limit, curr_power, increase=True)
-    else:
-        # First Step
-        if curr_power > limit:
-            # reduce frequency
-            change_freq(new_limit)
-        elif curr_power < limit:
-            # print("Increase")
-            change_freq(new_limit, increase=True)
-    return
 
 
 def main(arg1):

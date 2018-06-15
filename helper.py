@@ -120,6 +120,10 @@ class EnergyTracker:
         # return power value in milliwats
         return (self.energy-prev_energy)/(interval*self.MILLI)
 
+    def get_diff(self,prev_energy):
+        self.update()
+        return self.energy - prev_energy
+
 class Entity(Enum):
     """
     Tracked entity recognizer
@@ -167,7 +171,10 @@ class StatsTracker:
     def get_stat_diff(self, prev_stat,item=None):
         diff_stat = {}
         ## write stat_diff
+
         if item != None:
+            if item == "time":
+                diff_stat[item] = psutil._cpu_times_deltas(prev_stat[item], self.stat[item])
             return diff_stat[item]
         return self.stat
 
