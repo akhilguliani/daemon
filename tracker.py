@@ -59,6 +59,25 @@ class PerCoreTracker(dict):
             self[key] = value * val
         return self
 
+def update_delta_32(before, after):
+    """ Takes two PerCoreTracker Dicts and returns update delta """
+    if (before is None) or (after is None):
+        return 0
+    lesser = (after < before)
+    if  lesser[0]:
+        # One of the values has over-flowed
+        ret = PerCoreTracker()
+
+        for key, value in lesser[1].items():
+            if value:
+                ret[key] = 0x100000000 + after[key]
+            else:
+                ret[key] = after[key] - before[key]
+
+        return ret
+    else:
+        # no overflow return difference
+        return after - before
 
 def update_delta(before, after):
     """ Takes two PerCoreTracker Dicts and returns update delta """
@@ -71,7 +90,7 @@ def update_delta(before, after):
 
         for key, value in lesser[1].items():
             if value:
-                ret[key] = 0x100000000 + after[key]
+                ret[key] = 0x10000000000000000 + after[key]
             else:
                 ret[key] = after[key] - before[key]
 

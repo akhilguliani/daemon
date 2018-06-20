@@ -97,17 +97,24 @@ def change_freq(target_power, cpu=0, increase=False):
     # WARN: Hardecoded cpu numbers below
     #for i in range(psutil.cpu_count()):
     write_freq(new_freq, cpu)
+    write_freq(new_freq, cpu+1)
 
     return
 
 def change_freq_std(target_pwr, current_pwr, old_freq=None, cpu=0, increase=False):
     """ Update frequency based on target power and actulal power value """
+    # TODO: Fix this function - try to determine when to stop
+    # probably better to make this a class and track some of the variables and
+    # have a way of resetting
+
     # power differential to freq reduction factor
     new_freq = None
     if old_freq == None:
         new_freq = int(read_freq(cpu))
     else:
         new_freq = old_freq
+
+
     power_diff = abs(current_pwr - target_pwr)
     step = 100000
 
@@ -125,9 +132,20 @@ def change_freq_std(target_pwr, current_pwr, old_freq=None, cpu=0, increase=Fals
     else:
         new_freq = new_freq - step
 
+    bounds = get_freq_bounds()
+
+    if new_freq < bounds[0]:
+        new_freq = bounds[0]
+    if new_freq > bounds[1]:
+        new_freq = bounds[1]
+
     print("ch_freq_std ", target_pwr, new_freq, increase, power_diff)
     # WARN: Hardecoded cpu numbers below
     write_freq(new_freq, cpu)
+    if (cpu % 2) == 0 :
+        write_freq(new_freq, cpu+1)
+    else:
+        write_freq(new_freq, cpu+1)
 
     return new_freq
 

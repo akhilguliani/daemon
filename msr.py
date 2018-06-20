@@ -39,6 +39,9 @@ def readmsr(msr, cpu=0):
     except:
         raise OSError("msr module not loaded (run modprobe msr)")
 
+def get_percore_msr(MSR, cpulist=[0]):
+    return [readmsr(MSR, i) & 0xFFFFFFFFFFFFFFFF for i in cpulist]
+
 def get_percore_energy(cpulist=[0]):
     return [readmsr(AMD_MSR_CORE_ENERGY, i) & 0xFFFFFFFF for i in cpulist]
 
