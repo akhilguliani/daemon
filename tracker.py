@@ -17,6 +17,34 @@ class PerCoreTracker(dict):
                 rv[key] = value - other[key]
         return rv
 
+    def __mul__(self, other):
+        rv = PerCoreTracker()
+        for key, value in self.items():
+            if key in other.keys():
+                rv[key] = value * other[key]
+        return rv
+
+    def __floordiv__(self, other):
+        rv = PerCoreTracker()
+        for key, value in self.items():
+            if key in other.keys():
+                rv[key] = value // other[key]
+        return rv
+
+    def __truediv__(self, other):
+        rv = PerCoreTracker()
+        for key, value in self.items():
+            if key in other.keys():
+                rv[key] = value / other[key]
+        return rv
+
+    def __div__(self, other):
+        rv = PerCoreTracker()
+        for key, value in self.items():
+            if key in other.keys():
+                rv[key] = value / other[key]
+        return rv
+
     def __lt__(self, other):
         rv = PerCoreTracker()
         ret = True
@@ -52,6 +80,11 @@ class PerCoreTracker(dict):
     def __round__(self, ndigits):
         for key, value in self.items():
             self[key] = round(value, ndigits)
+        return self
+
+    def __abs__(self):
+        for key, value in self.items():
+            self[key] = abs(value)
         return self
 
     def scalar_mul(self, val):

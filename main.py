@@ -49,6 +49,8 @@ def main():
 
     first = True
     old_freq = [None] * len(cpus)
+    count = 0
+    change = PerCoreTracker()
 
     while(True):
         before = PerCoreTracker(dict(zip(cpus, get_percore_energy(cpus))))
@@ -61,11 +63,23 @@ def main():
         perf_delta = update_delta(perf_before, perf_after)
         track_perf = track_perf + perf_delta
         #print(round(track_energy,3), "\n", round(delta,3), "\n*_______")
-        print(round(delta,3), "\n*_______")
+#        print(round(delta,3), "\n*_______")
         #print(round(track_perf,3), "\n", round(perf_delta,3), "\n________")
-        print(round(perf_after,3), "\n________")
+
+        ## Percent change
 
         curr_power = delta.scalar_mul(1000)
+
+        if first:
+            power_tracker = delta
+        else:
+            power_tracker = (power_tracker + delta).scalar_mul(0.5)
+            change = (abs(delta - power_tracker) / power_tracker).scalar_mul(100)
+
+        print(round(power_tracker,3), "\n")
+        print(round(change,3), "\n")
+        print(round(perf_after,3), "\n________")
+
 
         for i in range(3):
             old_freq[i] = keep_limit(curr_power[cpus[i]], 5000, cpus[i], old_freq[i], first)
