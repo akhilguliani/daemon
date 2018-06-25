@@ -33,6 +33,14 @@ def get_all_busy_time():
         busy_times.append(psutil._cpu_busy_time(times[cpu]))
     return busy_times
 
+def track_core():
+    for proc in psutil.process_iter():
+        pd = proc.as_dict(attrs=['pid', 'status', 'threads'])
+        for p in proc.threads():
+            td = psutil.Process(p.id).as_dict()
+            if td['status'] == 'running':
+                print(td['pid'], ':', td['cpu_num'], td['name'], td['status'], td['cpu_times'])
+
 def main():
     """ Main Function """
 
@@ -81,6 +89,8 @@ def main():
         print(str(count)+','+(','.join(dtime))+','+(','.join(intensity.values()))\
               +','+str(curr_power)+','+str(curr_energy))
 
+        track_core()
+
 #        new_stats = {}
 #        for _proc in psutil.process_iter():
 #            _stat = _proc.as_dict(attrs=['pid', 'name', 'cpu_num', 'cpu_times'])
@@ -88,7 +98,7 @@ def main():
 #                new_stats[_stat['pid']] = _stat.copy()
 
 #        for key, value in new_stats.items():
-#            if key in prev_stats.keys():
+#         0   if key in prev_stats.keys():
 #                dtimes = diff_pcputimes(prev_stats[key]['cpu_times'], value['cpu_times'])
 #                print(key, " : ", sum(dtimes))
 

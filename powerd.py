@@ -50,8 +50,6 @@ def print_tracker(p_dict):
         print(value.procstat)
         print("\n********\n")
 
-
-
 def main(arg1):
     """
     The main funtion loop.
@@ -78,7 +76,7 @@ def main(arg1):
     prev_energy = _ea.get_update_energy()
     time.sleep(interval)
 
-    while 1:
+    while True:
         curr_power = _ea.get_power(prev_energy, interval)
         print(curr_power)
         istat = getSysStats()
