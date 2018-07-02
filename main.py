@@ -5,7 +5,7 @@ import subprocess
 from time import sleep
 import psutil
 from topology import cpu_tree
-from msr import AMD_MSR_CORE_ENERGY, writemsr, readmsr, get_percore_msr, get_percore_energy, get_units
+from msr import AMD_MSR_CORE_ENERGY, writemsr, readmsr, get_percore_msr, get_percore_energy, get_units, setup_perf
 from tracker import PerCoreTracker, update_delta, update_delta_32
 from frequency import *
 
@@ -21,36 +21,26 @@ def check_for_sudo_and_msr():
         # ensure modprobe msr is run
         subprocess.run(["modprobe", "msr"])
 
-def setup_perf():
-    val = readmsr(0xC0010015,0)
-    for i in range(16):
-        writemsr(0xC0010015, 0x4B200011, i)
-
 def main():
     # get cpu topology
     tree = cpu_tree()
 
     perf_msr = 0xC00000E9
     setup_perf()
+    energy_unit = get_units()
+    set_gov_userspace()
+
     # get cpu id's as a list
     cpus = [list(tree[0][i].keys())[0] for i in range(psutil.cpu_count(logical=False))]
 
     track_energy = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
     track_perf =  PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
-
     power_tracker = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
-
-    energy_unit = get_units()
-
-    set_gov_userspace()
-
-    for i in cpus:
-        print(get_freq_bounds())
-
     first = True
     old_freq = [None] * len(cpus)
     count = 0
     change = PerCoreTracker()
+    limits = [5000, 8000, 6000, 10000]
 
     while(True):
         before = PerCoreTracker(dict(zip(cpus, get_percore_energy(cpus))))
@@ -62,27 +52,24 @@ def main():
         track_energy = track_energy + delta.scalar_mul(energy_unit)
         perf_delta = update_delta(perf_before, perf_after)
         track_perf = track_perf + perf_delta
-        #print(round(track_energy,3), "\n", round(delta,3), "\n*_______")
-#        print(round(delta,3), "\n*_______")
-        #print(round(track_perf,3), "\n", round(perf_delta,3), "\n________")
+
+        delta.scalar_mul(1000)
 
         ## Percent change
-
-        curr_power = delta.scalar_mul(1000)
-
         if first:
             power_tracker = delta
         else:
-            power_tracker = (power_tracker + delta).scalar_mul(0.5)
-            change = (abs(delta - power_tracker) / power_tracker).scalar_mul(100)
+            change = (abs(delta - power_tracker) / delta).scalar_mul(100)
+            power_tracker = (power_tracker).scalar_mul(0.7) + (delta).scalar_mul(0.3)
 
         print(round(power_tracker,3), "\n")
         print(round(change,3), "\n")
         print(round(perf_after,3), "\n________")
 
-
-        for i in range(3):
-            old_freq[i] = keep_limit(curr_power[cpus[i]], 5000, cpus[i], old_freq[i], first)
+        for i in range(4):
+            #if change == {} or (change[cpus[i]] < 1 and delta[cpus[i]] < limits[i]):
+            #    continue
+            old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first)
 
         first = False
 

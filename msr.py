@@ -8,9 +8,7 @@ AMD_MSR_CORE_ENERGY = 0xC001029A
 AMD_MSR_PACKAGE_ENERGY = 0xC001029B
 
 def writemsr(msr, val, cpu=-1):
-    """
-    Function for writing to an msr register
-    """
+    """ Function for writing to an msr register """
     try:
         if cpu == -1:
             for cpu_msr in glob.glob('/dev/cpu/[0-9]*/msr'):
@@ -27,9 +25,7 @@ def writemsr(msr, val, cpu=-1):
         raise OSError("msr module not loaded (run modprobe msr)")
 
 def readmsr(msr, cpu=0):
-    """
-    function for readin an msr register
-    """
+    """ function for readin an msr register """
     try:
         file_id = os.open('/dev/cpu/%d/msr' % cpu, os.O_RDONLY)
         os.lseek(file_id, msr, os.SEEK_SET)
@@ -40,12 +36,15 @@ def readmsr(msr, cpu=0):
         raise OSError("msr module not loaded (run modprobe msr)")
 
 def get_percore_msr(MSR, cpulist=[0]):
+    """ Return Raw 64 bit MSR value for CPUs given """
     return [readmsr(MSR, i) & 0xFFFFFFFFFFFFFFFF for i in cpulist]
 
 def get_percore_energy(cpulist=[0]):
+    """ Return per core energy MSR value for Ryzen """
     return [readmsr(AMD_MSR_CORE_ENERGY, i) & 0xFFFFFFFF for i in cpulist]
 
 def get_units():
+    """ Get the various units for Power Units MSR """
     result = readmsr(AMD_MSR_PWR_UNIT, 0)
     power_unit = 0.5 ** (result & 0xF)
     energy_unit = 0.5 **  ((result >> 8) & 0x1F)
@@ -54,3 +53,11 @@ def get_units():
     print(hex(result), " ", power_unit, " ", energy_unit, " ", time_unit)
 
     return energy_unit
+
+def setup_perf():
+    """ Set bits to lock TSC value and enable Instruction count MSR """
+    val = readmsr(0xC0010015,0)
+    for i in range(16):
+        writemsr(0xC0010015, 0x4B200011, i)
+
+

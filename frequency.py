@@ -119,9 +119,9 @@ def change_freq_std(target_pwr, current_pwr, old_freq=None, cpu=0, increase=Fals
     step = 100000
 
     # Select the right step size
-    if power_diff < 900:
+    if power_diff < 500:
         # to close better settle than oscillate
-        return
+        return None
     elif power_diff > 3000 and power_diff < 10000:
         step = 100000
     elif power_diff > 10000:
