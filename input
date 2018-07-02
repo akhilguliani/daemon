@@ -1,4 +1,3 @@
-@
 /firestorm/spec2017/benchspec/CPU/507.cactuBSSN_r/run/run_base_refrate_mytest-m64.0000
 ./cactusBSSN_r spec_ref.par
 100
@@ -47,10 +46,6 @@
 ./perlbench_r -I./lib splitmail.pl 6400 12 26 16 100 0
 100
 @
-/firestorm/spec2017/benchspec/CPU/502.gcc_r/run/run_base_refrate_mytest-m64.0000
-./cpugcc_r ref32.c -O3 -fselective-scheduling -fselective-scheduling2 -o ref32.opts-O3_-fselective-scheduling_-fselective-scheduling2.s
-100
-@
 /firestorm/spec2017/benchspec/CPU/505.mcf_r/run/run_base_refrate_mytest-m64.0000
 ./mcf_r inp.in
 100
@@ -83,6 +78,3 @@
 ./xz_r input.combined.xz 250 a841f68f38572a49d86226b7ff5baeb31bd19dc637a922a972b2e6d1257a890f6a544ecab967c313e370478c74f760eb229d4eef8a8d2836d233d3e9dd1430bf 40401484 41217675 7
 100
 @
-/firestorm/spec2017/benchspec/CPU/999.specrand_ir/run/run_base_refrate_mytest-m64.0000
-./specrand_ir 1255432124 234923
-100
