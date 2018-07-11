@@ -35,12 +35,13 @@ def parse_file(file_path):
             elif count == 4:
                 # extract shares
                 prio = None
-                if line=="High":
-                    prio=-19
-                elif line=="Medium":
-                    prio=0
-                elif line=="Low":
-                    prio=20
+                theline = line.strip()
+                if theline=="High":
+                    prio = -19
+                elif theline=="Medium":
+                    prio = 0
+                elif theline=="Low":
+                    prio = 20
                 local.append(prio)
                 # print(local)
             count += 1
