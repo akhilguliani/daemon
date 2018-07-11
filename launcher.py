@@ -1,11 +1,9 @@
-"""
-Helper functions to parse and launch programs presented in an input file
-"""
+""" Helper functions to parse and launch programs presented in an input file """
 
+from time import time
 import shlex
 import subprocess
 import psutil
-from time import time
 
 def parse_file(file_path):
     """Parse input file and return list of programs with thier dir annd shares"""
@@ -34,9 +32,19 @@ def parse_file(file_path):
                 if shares > 100:
                     shares = 100
                 local.append(shares)
-                print(local)
+            elif count == 4:
+                # extract shares
+                prio = None
+                if line=="High":
+                    prio=-19
+                elif line=="Medium":
+                    prio=0
+                elif line=="Low":
+                    prio=20
+                local.append(prio)
+                # print(local)
             count += 1
-    print("__\n", retval)
+    # print("__\n", retval)
     return retval
 
 def launch_on_core(process_info, cpu=0):
@@ -45,7 +53,7 @@ def launch_on_core(process_info, cpu=0):
     pargs = process_info[1]
     ret = psutil.Popen(args=pargs, cwd=pcwd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     ret.cpu_affinity([cpu])
-    # ret.nice() # if we need to add priorities
+    ret.nice(process_info[3]) # if we need to add priorities
     return ret
 
 def run_on_core(process_info, cpu=0):
@@ -58,8 +66,8 @@ def run_on_core(process_info, cpu=0):
     def print_time(proc):
         """ Print Process Info on compeletion """
         end_time = time()
-        p_dict = proc_dict[proc.pid]
-        print(p_dict['name'], p_dict['pid'], p_dict['cpu_num'], str(end_time - p_dict['create_time']))
+        p_dic = proc_dict[proc.pid]
+        print(p_dic['name'], p_dic['pid'], p_dic['cpu_num'], str(end_time - p_dic['create_time']))
 
     psutil.wait_procs([p], timeout=None, callback=print_time)
     return

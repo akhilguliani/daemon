@@ -49,6 +49,15 @@ def write_freq(val, cpu=0):
         freq_file.close()
     return
 
+def set_to_max_freq(cpu=None):
+    max_freq = get_freq_bounds()[1]
+    if cpu == None:
+        for c in range(psutil.cpu_count()):
+            write_freq(max_freq, c)
+    else:
+            write_freq(max_freq, cpu)
+    return max_freq
+
 def power_at_freq(in_freq):
     # freq is represented as 8 = 800MHz; 42 = 4200MHz
     bounds = get_freq_bounds()
