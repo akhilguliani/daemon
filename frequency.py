@@ -29,7 +29,7 @@ def set_gov_userspace():
         print("Unspported Driver: please enable intel/acpi_cpufreq from kerenl cmdline")
 
 def quantize(value):
-    ret = int(value / 100000)
+    ret = round(value / 100000)
     return ret*100000
 
 def read_freq(cpu=0):
@@ -38,6 +38,14 @@ def read_freq(cpu=0):
     ret_val = freq_file.read()
     freq_file.close()
     return str(quantize(int(ret_val)))
+
+def read_freq_real(cpu=0):
+    """ Return Real frequency as reported to cpufreq"""
+    f_file = "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_cur_freq" % cpu
+    freq_file = open(f_file)
+    ret_val = freq_file.read()
+    freq_file.close()
+    return int(ret_val)
 
 def write_freq(val, cpu=0):
     bounds = get_freq_bounds()
@@ -50,12 +58,13 @@ def write_freq(val, cpu=0):
     return
 
 def set_to_max_freq(cpu=None):
+    """ Set all the cpus to max frequency"""
     max_freq = get_freq_bounds()[1]
-    if cpu == None:
+    if cpu is None:
         for c in range(psutil.cpu_count()):
             write_freq(max_freq, c)
     else:
-            write_freq(max_freq, cpu)
+        write_freq(max_freq, cpu)
     return max_freq
 
 def power_at_freq(in_freq):
@@ -118,7 +127,7 @@ def change_freq_std(target_pwr, current_pwr, old_freq=None, cpu=0, increase=Fals
 
     # power differential to freq reduction factor
     new_freq = None
-    if old_freq == None:
+    if old_freq is None:
         new_freq = int(read_freq(cpu))
     else:
         new_freq = old_freq
@@ -148,10 +157,10 @@ def change_freq_std(target_pwr, current_pwr, old_freq=None, cpu=0, increase=Fals
     if new_freq > bounds[1]:
         new_freq = bounds[1]
 
-    print("ch_freq_std ", target_pwr, new_freq, increase, power_diff)
+    print("ch_freq_std ", cpu, target_pwr, new_freq, increase, power_diff)
     # WARN: Hardecoded cpu numbers below
     write_freq(new_freq, cpu)
-    if (cpu % 2) == 0 :
+    if (cpu % 2) == 0:
         write_freq(new_freq, cpu+1)
     else:
         write_freq(new_freq, cpu+1)
