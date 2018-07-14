@@ -1,10 +1,28 @@
 
+""" Main process loop for managing power
+by Akhil Guliani
+
+Usage:
+    powerd.py [-i FILE] [--interval=<minutes>] PID...
+
+Arguments:
+    PID     pids to track
+
+Options:
+    -h
+    -i FILE --input=FILE    file with pids to monitor and their control params
+    --interval=<seconds>   max amount of time in minutes to keep the daemon alive
+"""
+
 import os
 import signal
 import subprocess
 from time import sleep
 import psutil
 import matplotlib.pyplot as plt
+import sys
+from docopt import docopt
+from schema import Schema, And, Or, Use, SchemaError
 from topology import cpu_tree
 from msr import AMD_MSR_CORE_ENERGY, writemsr, readmsr, get_percore_msr, get_percore_energy, get_units, setup_perf
 from tracker import PerCoreTracker, update_delta, update_delta_32
@@ -63,22 +81,27 @@ def plot_all(freq_dict, pwr_dict, perf_dict, tick, cpus, pwr_limits):
         else:
             plt.subplot(3, grid_size, i+(2*len(cpus))+1, sharey=ax[2])
         plt.scatter(tick, perf_dict[cpus[i]], marker='.', color=c[i])
+
         #plt.ylim(ymin=0)
     plt.draw()
     plt.pause(0.1)
 
 
-def main():
-    """ Main function """
-    # get cpu topology
-    tree = cpu_tree()
+def main(arg1, energy_unit, tree):
+    """
+    Main funtion loop.
+
+    Parameters
+    ----------
+    arg1 : dict
+        commandline arguments as a dictionary
+    energy_unit : int
+        Multiplication factor for energy measurements
+    tree : Dict
+        CPU topology tree
+   """
 
     perf_msr = 0xC00000E9
-    setup_perf()
-    energy_unit = get_units()
-    set_gov_userspace()
-    set_to_max_freq()
-
     # get cpu id's as a list
     cpus = [list(tree[0][i].keys())[0] for i in range(psutil.cpu_count(logical=False))]
 
@@ -88,7 +111,7 @@ def main():
     first = True
     old_freq = [None] * len(cpus)
     count = 0
-    list_procs = parse_file("input3")
+    list_procs = parse_file(arg1['--input'])
     limit = 24
     max_per_core = 10
     list_procs.sort(key=itemgetter(3))
@@ -106,11 +129,15 @@ def main():
     while True:
         before = PerCoreTracker(dict(zip(cpus, get_percore_energy(cpus))))
         perf_before = PerCoreTracker(dict(zip(cpus, get_percore_msr(perf_msr, cpus))))
-        sleep(1)
+
+        sleep(int(arg1['--interval']))
+
         after = PerCoreTracker(dict(zip(cpus, get_percore_energy(cpus))))
         delta = update_delta_32(before, after)
         perf_after = PerCoreTracker(dict(zip(cpus, get_percore_msr(perf_msr, cpus))))
+
         track_energy = track_energy + delta.scalar_mul(energy_unit)
+
         perf_delta = update_delta(perf_before, perf_after)
         track_perf = track_perf + perf_delta
 
@@ -143,6 +170,29 @@ def main():
 
 ## Starting point
 if __name__ == "__main__":
+    # Get Command line arguments
+    ARGUMENTS = docopt(__doc__, version="0.01a")
+
+    # Check Command line arguments
+    SCHEMA = Schema({
+        '--input': Or(None, And(Use(open,
+            error='input FILE should be readable'))),
+        '--interval': Or(None, And(Use(int), lambda n: 0 < n < 1000),
+            error='--interval=N should be integer 0 < N < 1000'),
+        'PID': [Or(None, And(Use(int), lambda n: 1 < n < 32768),
+            error='PID should be inteager within 1 < N < 32768')],
+        })
+    try:
+        ARG_VALIDATE = SCHEMA.validate(ARGUMENTS)
+    except SchemaError as _e:
+        exit(_e)
+
     signal.signal(signal.SIGINT, signal_handler)
+    # get cpu topology
+    tree = cpu_tree()
+    setup_perf()
+    energy_unit = get_units()
+    set_gov_userspace()
+    set_to_max_freq()
     check_for_sudo_and_msr()
-    main()
+    main(ARGUMENTS, energy_unit, tree)
