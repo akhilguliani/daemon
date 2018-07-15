@@ -188,11 +188,11 @@ if __name__ == "__main__":
         exit(_e)
 
     signal.signal(signal.SIGINT, signal_handler)
+    check_for_sudo_and_msr()
     # get cpu topology
     tree = cpu_tree()
     setup_perf()
     energy_unit = get_units()
     set_gov_userspace()
     set_to_max_freq()
-    check_for_sudo_and_msr()
     main(ARGUMENTS, energy_unit, tree)
