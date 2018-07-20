@@ -72,3 +72,8 @@ def run_on_core(process_info, cpu=0):
 
     psutil.wait_procs([p], timeout=None, callback=print_time)
     return
+
+def wait_for_procs(procs, callback_fn):
+    gone, alive = psutil.wait_procs(procs, timeout=None, callback=callback_fn)
+    for _p in alive:
+        _p.kill()

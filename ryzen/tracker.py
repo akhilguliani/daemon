@@ -123,7 +123,7 @@ def update_delta(before, after):
 
         for key, value in lesser[1].items():
             if value:
-                ret[key] = 0x10000000000000000 + after[key]
+                ret[key] = after[key]
             else:
                 ret[key] = after[key] - before[key]
 

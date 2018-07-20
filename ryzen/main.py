@@ -3,7 +3,7 @@
 by Akhil Guliani
 
 Usage:
-    powerd.py [-i FILE] [--interval=<minutes>] PID...
+    powerd.py [-i FILE] [--interval=<seconds>] PID...
 
 Arguments:
     PID     pids to track
@@ -29,6 +29,7 @@ from tracker import PerCoreTracker, update_delta, update_delta_32
 from frequency import *
 from launcher import *
 from operator import itemgetter
+from multiprocessing import Process
 
 def signal_handler(_signal, _frame):
     """ Handle SIGINT"""
@@ -54,7 +55,23 @@ def launch_all(list_proc):
         retval.append(_p)
         retdict.update({i*2:_p.as_dict()})
         i = i+1
-    return retdict
+    return retdict, retval
+
+def exit_when_done(procs):
+    """Post execution function for static executions"""
+    print("\nExiting ...")
+    os.killpg(os.getpgrp(), signal.SIGINT)
+    # plt.show()
+    exit(0)
+
+
+def launch_all_with_post_fn(list_proc, post_exec_fn):
+    """Launch all the process in the list on successive cores"""
+    i = 0
+    retdict, retval = launch_all(list_proc)
+    wait_for_procs(retval, post_exec_fn)
+    return
+
 
 def plot_all(freq_dict, pwr_dict, perf_dict, tick, cpus, pwr_limits):
     grid_size = len(cpus)
@@ -124,12 +141,13 @@ def main(arg1, energy_unit, tree):
 #    shares_per_watt = [x[2]/y for x,y in zip(high, limits)]
     change = PerCoreTracker()
 #    limits = [5000, 8000, 6000, 10000]
-    launch_all(high)
+#    launch_all(high)
+    wait_thread = Process(target=launch_all_with_post_fn, args=(high, exit_when_done))
+    wait_thread.start()
 
     while True:
         before = PerCoreTracker(dict(zip(cpus, get_percore_energy(cpus))))
         perf_before = PerCoreTracker(dict(zip(cpus, get_percore_msr(perf_msr, cpus))))
-
         sleep(int(arg1['--interval']))
 
         after = PerCoreTracker(dict(zip(cpus, get_percore_energy(cpus))))
@@ -139,16 +157,17 @@ def main(arg1, energy_unit, tree):
         track_energy = track_energy + delta.scalar_mul(energy_unit)
 
         perf_delta = update_delta(perf_before, perf_after)
-        track_perf = track_perf + perf_delta
 
         delta.scalar_mul(1000)
 
         ## Percent change
         if first:
             power_tracker = delta
+            track_perf = perf_delta
         else:
             change = (abs(delta - power_tracker) / power_tracker).scalar_mul(100)
             power_tracker = (power_tracker).scalar_mul(0.7) + (delta).scalar_mul(0.3)
+            track_perf = track_perf.scalar_mul(0.7) + perf_delta.scalar_mul(0.3)
 
         for i in range(4):
             #if change == {} or (change[cpus[i]] < 1 and delta[cpus[i]] < limits[i]):
@@ -162,7 +181,7 @@ def main(arg1, energy_unit, tree):
         # print(old_freq)
         f_dict = dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus]))
         print(f_dict)
-        print(round(perf_after, 3), "\n________")
+        print(round(perf_delta, 3), "\n________")
 
         first = False
         count = count + 1
