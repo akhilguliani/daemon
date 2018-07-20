@@ -77,6 +77,28 @@ def pstate2str(val):
     else:
         return "Disabled"
 
+def setbits(val, base, length, new):
+    return (val ^ (val & ((2 ** length - 1) << base))) + (new << base)
+
+def setfid(val, new):
+    return setbits(val, 0, 8, new)
+
+def setdid(val, new):
+    return setbits(val, 8, 6, new)
+
+def freq_to_multiplier(frequency):
+    ratio = frequency/100000.
+    return int(ratio*4) , 8
+
+def update_pstate_freq(freq, state):
+    pstate_val = readmsr(PSTATES[state], cpu=0)
+    fid, did = freq_to_multiplier(freq)
+    pstate_val = setfid(pstate_val, fid)
+    pstate_val = setdid(pstate_val, did)
+    writemsr(PSTATES[state], pstate_val)
+    return
+
+
 def print_pstate_values():
     """ Debug function to read pstate configs"""
     for i in range(3):

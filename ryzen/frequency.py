@@ -2,6 +2,7 @@
 import psutil
 import subprocess
 import time
+from msr import update_pstate_freq
 
 def get_freq_bounds(cpu=0):
     bounds = [0, 0]
@@ -11,6 +12,10 @@ def get_freq_bounds(cpu=0):
     freq_file = open("/sys/devices/system/cpu/cpu%d/cpufreq/scaling_min_freq" % cpu, 'r')
     bounds[0] = int(freq_file.read())
     freq_file.close()
+    return bounds
+
+def get_freq_bounds_ryzen(cpu=0):
+    bounds = [800000, 3400000]
     return bounds
 
 def set_gov_userspace():
@@ -57,6 +62,23 @@ def write_freq(val, cpu=0):
         freq_file.close()
     return
 
+def update_write_freq(val, cpu=0):
+    """ AMD Ryzen Specific write frequency loop
+        Here we update the relevant P-State to match the val given
+        the h/w can override us
+    """
+    states = [2200000, 3000000, 3400000]
+    if val in states:
+        write_freq(val, cpu)
+    elif val > states[0] and val < states[-1]:
+        # Update state 1 to mean val
+        update_pstate_freq(val, 1)
+        write_freq(states[1], cpu)
+    elif val < states[0] and val >= 800000:
+        update_pstate_freq(val, 2)
+        write_freq(states[0], cpu)
+    return
+
 def set_to_max_freq(cpu=None):
     """ Set all the cpus to max frequency"""
     max_freq = get_freq_bounds()[1]
@@ -69,13 +91,13 @@ def set_to_max_freq(cpu=None):
 
 def power_at_freq(in_freq):
     # freq is represented as 8 = 800MHz; 42 = 4200MHz
-    bounds = get_freq_bounds()
+    bounds = get_freq_bounds_ryzen()
     if in_freq <= bounds[1] and in_freq >= bounds[0]:
         freq = in_freq/100000
     elif in_freq < bounds[0]:
         freq = 8
     elif in_freq > bounds[1]:
-        freq = 42
+        freq = 34
     return (0.0211*(freq**2) - 0.4697*freq + 7.7535)*1000
 
 def freq_at_power(power):
@@ -114,8 +136,8 @@ def change_freq(target_power, cpu=0, increase=False):
     print("change_freq:", new_freq, old_freq, new_power, target_power)
     # WARN: Hardecoded cpu numbers below
     #for i in range(psutil.cpu_count()):
-    write_freq(new_freq, cpu)
-    write_freq(new_freq, cpu+1)
+    update_write_freq(new_freq, cpu)
+    update_write_freq(new_freq, cpu+1)
 
     return
 
@@ -161,9 +183,9 @@ def change_freq_std(target_pwr, current_pwr, old_freq=None, cpu=0, increase=Fals
     # WARN: Hardecoded cpu numbers below
     write_freq(new_freq, cpu)
     if (cpu % 2) == 0:
-        write_freq(new_freq, cpu+1)
+        update_write_freq(new_freq, cpu+1)
     else:
-        write_freq(new_freq, cpu+1)
+        update_write_freq(new_freq, cpu-1)
 
     return new_freq
 
