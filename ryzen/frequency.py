@@ -89,6 +89,16 @@ def set_to_max_freq(cpu=None):
         write_freq(max_freq, cpu)
     return max_freq
 
+def set_to_freq(freq, cpu=None):
+    """ Set all the cpus to a given frequency"""
+    if cpu is None:
+        for c in range(psutil.cpu_count()):
+            write_freq(freq, c)
+    else:
+        write_freq(freq, cpu)
+    return freq
+
+
 def power_at_freq(in_freq):
     # freq is represented as 8 = 800MHz; 42 = 4200MHz
     bounds = get_freq_bounds_ryzen()
