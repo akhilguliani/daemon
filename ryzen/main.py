@@ -3,7 +3,7 @@
 by Akhil Guliani
 
 Usage:
-    powerd.py [-i FILE] [--interval=<seconds>] PID...
+    main.py [-i FILE] [--interval=<seconds>] PID...
 
 Arguments:
     PID     pids to track
@@ -141,8 +141,8 @@ def main(arg1, energy_unit, tree):
 #    shares_per_watt = [x[2]/y for x,y in zip(high, limits)]
     change = PerCoreTracker()
 #    limits = [5000, 8000, 6000, 10000]
-#    launch_all(high)
-    wait_thread = Process(target=launch_all_with_post_fn, args=(high, exit_when_done))
+    wait_thread = Process(target=launch_all, args=(high,))
+#    wait_thread = Process(target=launch_all_with_post_fn, args=(high, exit_when_done))
     wait_thread.start()
 
     while True:
