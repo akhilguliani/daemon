@@ -36,11 +36,11 @@ def parse_file(file_path):
                 # extract shares
                 prio = None
                 theline = line.strip()
-                if theline=="High":
+                if theline == "High":
                     prio = -19
-                elif theline=="Medium":
+                elif theline == "Medium":
                     prio = 0
-                elif theline=="Low":
+                elif theline == "Low":
                     prio = 20
                 local.append(prio)
                 # print(local)
@@ -77,3 +77,22 @@ def wait_for_procs(procs, callback_fn):
     gone, alive = psutil.wait_procs(procs, timeout=None, callback=callback_fn)
     for _p in alive:
         _p.kill()
+
+def run_on_all_cores(process_info, cores=[0]):
+    """ Take the output from parse_file and launch the process on a cores=cpu """
+    p_list = []
+    proc_dict = {}
+    for cpu in cores:
+        p = launch_on_core(process_info, cpu)
+        p_dict_loc = p.as_dict()
+        proc_dict[p_dict_loc['pid']] = p_dict_loc
+        p_list.append(p)
+
+    def print_time(proc):
+        """ Print Process Info on compeletion """
+        end_time = time()
+        p_dic = proc_dict[proc.pid]
+        print(p_dic['name'], p_dic['pid'], p_dic['cpu_num'], str(end_time - p_dic['create_time']))
+
+    psutil.wait_procs(p_list, timeout=None, callback=print_time)
+    return

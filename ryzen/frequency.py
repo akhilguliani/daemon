@@ -98,6 +98,12 @@ def set_to_freq(freq, cpu=None):
         write_freq(freq, cpu)
     return freq
 
+def set_to_freq_odd(freq):
+    """ Set all the cpus to a given frequency"""
+    for c in range(psutil.cpu_count()):
+        if not (c % 2 == 0):
+            write_freq(freq, c)
+    return freq
 
 def power_at_freq(in_freq):
     # freq is represented as 8 = 800MHz; 42 = 4200MHz
@@ -229,3 +235,31 @@ def keep_limit(curr_power, limit=10000, cpu=0, last_freq=None, first_limit=True)
             change_freq(new_limit, cpu, increase=True)
     return old_freq
 
+def set_rapl_limit(limit):
+    """ set rapl limit in watts """
+    rapl_file = "/sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw"
+    multiplier = 1000000
+    rapl = open(rapl_file, 'w')
+    rapl.write(str(limit * multiplier))
+    rapl.close()
+    return limit
+
+def setup_rapl():
+    """ Enable RAPL with TDP limit and 0.09 Sec time window """
+    rapl_dir = "/sys/class/powercap/intel-rapl:0/"
+    rapl_file = rapl_dir + "constraint_0_power_limit_uw"
+    # Find Max Limit Possible and write it as limit
+    max_limit = open(rapl_dir + "constraint_0_max_power_uw")
+    rapl = open(rapl_file, 'w')
+    rapl.write(max_limit.read())
+    rapl.close()
+    max_limit.close()
+    # set RAPL window time
+    rapl_time = open(rapl_dir + "constraint_0_time_window_us", 'w')
+    rapl_time.write("99942")
+    rapl_time.close()
+    # Enable RAPL limit
+    enable = open(rapl_dir + "enabled", 'w')
+    enable.write("1")
+    enable.close()
+    return
