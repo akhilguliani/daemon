@@ -98,6 +98,19 @@ def set_to_freq(freq, cpu=None):
         write_freq(freq, cpu)
     return freq
 
+def set_seq_freqs(freq_seq, num_cores):
+    """ Set all the cpus to sequentially reducing frequencies
+        For Ryzen we only have three P-states """
+    if num_cores > psutil.cpu_count(logical=False):
+        # limit to max number of cores
+        num_cores = psutil.cpu_count(logical=False)
+    for c in range(num_cores):
+        curr_freq = freq_seq[c%len(freq_seq)]
+        write_freq(curr_freq, c*2)
+        write_freq(curr_freq, c*2+1)
+    return
+
+
 def power_at_freq(in_freq):
     # freq is represented as 8 = 800MHz; 42 = 4200MHz
     bounds = get_freq_bounds_ryzen()
