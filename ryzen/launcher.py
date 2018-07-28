@@ -96,3 +96,30 @@ def run_on_all_cores(process_info, cores=[0]):
 
     psutil.wait_procs(p_list, timeout=None, callback=print_time)
     return
+
+def run_multiple_on_cores(process_info_list, cores=None):
+    """ Take the output from parse_file and launch the processes on cores=[cpu,...] """
+    # Ensure size of cores and process_info_list is same
+    if len(process_info_list) > psutil.cpu_count(logical=False):
+        print("More Processess than cores, can't run em all")
+        exit(1)
+    # one more check for len(process_info_list) == len(cores)
+    if cores is None:
+        cores = range(len(process_info_list))
+
+    p_list = []
+    proc_dict = {}
+    for cpu, process_info in zip(cores, process_info_list):
+        p = launch_on_core(process_info, cpu)
+        p_dict_loc = p.as_dict()
+        proc_dict[p_dict_loc['pid']] = p_dict_loc
+        p_list.append(p)
+
+    def print_time(proc):
+        """ Print Process Info on compeletion """
+        end_time = time()
+        p_dic = proc_dict[proc.pid]
+        print(p_dic['name'], p_dic['pid'], p_dic['cpu_num'], str(end_time - p_dic['create_time']))
+
+    psutil.wait_procs(p_list, timeout=None, callback=print_time)
+    return

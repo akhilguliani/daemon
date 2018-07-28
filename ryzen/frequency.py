@@ -101,9 +101,18 @@ def set_to_freq(freq, cpu=None):
 def set_to_freq_odd(freq):
     """ Set all the cpus to a given frequency"""
     for c in range(psutil.cpu_count()):
-        if not (c % 2 == 0):
+        if not c % 2 == 0:
             write_freq(freq, c)
     return freq
+
+def set_seq_freqs(start_freq, step, num_cores):
+    """ Set all the cpus to sequentially reducing frequencies"""
+    curr_freq = start_freq
+    for c in range(num_cores):
+        write_freq(curr_freq, c)
+        curr_freq = curr_freq - step
+    return
+
 
 def power_at_freq(in_freq):
     # freq is represented as 8 = 800MHz; 42 = 4200MHz
