@@ -68,15 +68,19 @@ def update_write_freq(val, cpu=0):
         the h/w can override us
     """
     states = [2200000, 3000000, 3400000]
-    if val in states:
-        write_freq(val, cpu)
-    elif val > states[0] and val < states[-1]:
+    #if val in states:
+    #    write_freq(val, cpu)
+    if val > states[0] and val < states[-1]:
         # Update state 1 to mean val
         update_pstate_freq(val, 1)
         write_freq(states[1], cpu)
-    elif val < states[0] and val >= 800000:
+    elif val <= states[0] and val >= 800000:
         update_pstate_freq(val, 2)
         write_freq(states[0], cpu)
+    elif val >= states[-1] and val <= 3800000:
+        # Overclocking
+        update_pstate_freq(val, 0)
+        write_freq(states[-1], cpu)
     return
 
 def set_to_max_freq(cpu=None):
