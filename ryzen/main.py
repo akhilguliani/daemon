@@ -125,6 +125,11 @@ def main(arg1, energy_unit, tree):
     track_energy = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
     track_perf = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
     power_tracker = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
+
+    sum_freq = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
+    sum_perf = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
+    sum_power = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
+
     first = True
     old_freq = [None] * len(cpus)
     count = 0
@@ -141,8 +146,8 @@ def main(arg1, energy_unit, tree):
 #    shares_per_watt = [x[2]/y for x,y in zip(high, limits)]
     change = PerCoreTracker()
 #    limits = [5000, 8000, 6000, 10000]
-    wait_thread = Process(target=launch_all, args=(high,))
-#    wait_thread = Process(target=launch_all_with_post_fn, args=(high, exit_when_done))
+#    wait_thread = Process(target=launch_all, args=(high,))
+    wait_thread = Process(target=launch_all_with_post_fn, args=(high, exit_when_done))
     wait_thread.start()
 
     while True:
@@ -151,22 +156,22 @@ def main(arg1, energy_unit, tree):
         sleep(int(arg1['--interval']))
 
         after = PerCoreTracker(dict(zip(cpus, get_percore_energy(cpus))))
-        delta = update_delta_32(before, after)
+        power_delta = update_delta_32(before, after)
         perf_after = PerCoreTracker(dict(zip(cpus, get_percore_msr(perf_msr, cpus))))
 
-        track_energy = track_energy + delta.scalar_mul(energy_unit)
+        track_energy = track_energy + power_delta.scalar_mul(energy_unit)
 
         perf_delta = update_delta(perf_before, perf_after)
 
-        delta.scalar_mul(1000)
+        power_delta.scalar_mul(1000)
 
         ## Percent change
         if first:
-            power_tracker = delta
+            power_tracker = power_delta
             track_perf = perf_delta
         else:
-            change = (abs(delta - power_tracker) / power_tracker).scalar_mul(100)
-            power_tracker = (power_tracker).scalar_mul(0.7) + (delta).scalar_mul(0.3)
+            change = (abs(power_delta - power_tracker) / power_tracker).scalar_mul(100)
+            power_tracker = (power_tracker).scalar_mul(0.7) + (power_delta).scalar_mul(0.3)
             track_perf = track_perf.scalar_mul(0.7) + perf_delta.scalar_mul(0.3)
 
         for i in range(4):
@@ -175,16 +180,23 @@ def main(arg1, energy_unit, tree):
             #if i == 0:
             #    continue
             old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first)
+        count = count + 1
+
+        print(count)
+        f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
+        sum_perf = sum_perf + perf_delta
+        sum_freq = sum_freq + f_dict
+        sum_power = sum_power + power_tracker
+
+        print(round(sum_power.scalar_div(count), 0))
+        print(round(sum_freq.scalar_div(count), 0))
+        print(round(sum_perf.scalar_div(count), 0), "\n------")
 
         print(round(power_tracker, 3))
-        # print(round(change, 3), "\n")
-        # print(old_freq)
-        f_dict = dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus]))
         print(f_dict)
         print(round(perf_delta, 3), "\n________")
 
         first = False
-        count = count + 1
         plot_all(f_dict, power_tracker, track_perf, count, cpus[:len(high)], limits)
 
 ## Starting point

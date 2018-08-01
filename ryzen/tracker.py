@@ -87,6 +87,13 @@ class PerCoreTracker(dict):
             self[key] = abs(value)
         return self
 
+    def scalar_div(self, val):
+        rv = PerCoreTracker()
+        ret = True
+        for key, value in self.items():
+            rv[key] = value / val
+        return rv
+
     def scalar_mul(self, val):
         for key, value in self.items():
             self[key] = value * val
