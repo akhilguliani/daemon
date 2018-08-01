@@ -22,10 +22,15 @@ bounds = get_freq_bounds()
 
 input_file = sys.argv[1]
 
-set_seq_freqs(2000000, freq_step_size, 10)
+file_name = input_file+str(time())
+
+print(file_name)
+
+set_seq_freqs(2200000, freq_step_size, 10)
+
 ## Read in the workloads and run
 r = parse_file(input_file)
-f = open("/mydata/output/percore/"+input_file+str(time()), "w+")
+f = open("/mydata/output/test/"+file_name, "w+")
 f.flush()
 tstat = psutil.Popen(args=["turbostat", "--debug", "--interval=1"], stdout=f)
 run_multiple_on_cores(r)
