@@ -12,6 +12,9 @@ def parse_file(file_path):
         count = 1
         local = []
         for line in pfile:
+            if "#" == line[0]:
+                # Adding comments in file
+                continue
             if "@" in line:
                 if local != []:
                     retval.append(local)
