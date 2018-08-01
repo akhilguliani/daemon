@@ -62,11 +62,14 @@ def write_freq(val, cpu=0):
         freq_file.close()
     return
 
-def update_write_freq(val, cpu=0):
+def update_write_freq(val, cpu=0, turbo=False):
     """ AMD Ryzen Specific write frequency loop
         Here we update the relevant P-State to match the val given
         the h/w can override us
     """
+    max_freq = 3400000
+    if turbo:
+        max_freq = 3800000
     states = [2200000, 3000000, 3400000]
     #if val in states:
     #    write_freq(val, cpu)
@@ -77,7 +80,7 @@ def update_write_freq(val, cpu=0):
     elif val <= states[0] and val >= 800000:
         update_pstate_freq(val, 2)
         write_freq(states[0], cpu)
-    elif val >= states[-1] and val <= 3800000:
+    elif val >= states[-1] and val <= max_freq:
         # Overclocking
         update_pstate_freq(val, 0)
         write_freq(states[-1], cpu)
@@ -198,7 +201,7 @@ def change_freq_std(target_pwr, current_pwr, old_freq=None, cpu=0, increase=Fals
     else:
         new_freq = new_freq - step
 
-    bounds = get_freq_bounds()
+    bounds = get_freq_bounds_ryzen()
 
     if new_freq < bounds[0]:
         new_freq = bounds[0]
