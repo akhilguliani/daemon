@@ -12,6 +12,8 @@ def parse_file(file_path):
         count = 1
         local = []
         for line in pfile:
+            if "#" in line:
+                continue
             if "@" in line:
                 if local != []:
                     retval.append(local)
@@ -120,6 +122,38 @@ def run_multiple_on_cores(process_info_list, cores=None):
         end_time = time()
         p_dic = proc_dict[proc.pid]
         print(p_dic['name'], p_dic['pid'], p_dic['cpu_num'], str(end_time - p_dic['create_time']))
+
+    psutil.wait_procs(p_list, timeout=None, callback=print_time)
+    return
+
+def run_on_cores_restart(process_info_list, copies=1, cores=None, rstrt_even=False):
+    """ Take the output from parse_file and launch the processes on cores=[cpu,...] """
+    # Ensure size of cores and process_info_list is same
+    num_procs = len(process_info_list)
+    if num_procs > 2:
+        print("More than 2 processes")
+        exit(1)
+    # one more check for len(process_info_list) == len(cores)
+    if cores is None:
+        cores = range(copies)
+
+    p_list = []
+    proc_dict = {}
+    for cpu in cores:
+        process_info = process_info_list[cpu % num_procs]
+        p = launch_on_core(process_info, cpu)
+        p_dict_loc = p.as_dict()
+        p_dict_loc['work_info'] = process_info_list[cpu % num_procs]
+        proc_dict[p_dict_loc['pid']] = p_dict_loc
+        p_list.append(p)
+
+    def print_time(proc):
+        """ Print Process Info on compeletion """
+        end_time = time()
+        p_dic = proc_dict[proc.pid]
+        print(p_dic['name'], p_dic['pid'], p_dic['cpu_num'], str(end_time - p_dic['create_time']))
+        if rstrt_even and p_dic['cpu_num']%2 == 0:
+            launch_on_core(process_info_list[p_dic['cpu_num'] % num_procs], p_dic['cpu_num'])
 
     psutil.wait_procs(p_list, timeout=None, callback=print_time)
     return
