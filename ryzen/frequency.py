@@ -106,10 +106,11 @@ def set_to_freq_odd(freq):
     return freq
 
 def set_seq_freqs(start_freq, step, num_cores):
-    """ Set all the cpus to sequentially reducing frequencies"""
+    """ Set all the cpus to sequentially reducing frequencies for Xeon"""
     curr_freq = start_freq
     for c in range(num_cores):
         write_freq(curr_freq, c)
+        write_freq(curr_freq, c+21)
         curr_freq = curr_freq - step
     return
 
