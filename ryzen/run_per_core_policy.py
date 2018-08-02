@@ -34,6 +34,7 @@ for cur_lim in list_limits[:]:
     f = open("/mydata/output/fairness/"+input_file+"_"+str(cur_freq)+"_"+str(cur_lim), "w+")
     f.flush()
     tstat = psutil.Popen(args=["turbostat", "--debug", "--interval=1"], stdout=f)
-    run_on_cores_restart(work, copies=10, rstrt_even=False)
+    run_on_cores_restart2(work, copies=10, rstrt_even=True)
+    psutil.Popen(args=["killall", work[0][1][0].strip('./')])
     tstat.kill()
     f.close()
