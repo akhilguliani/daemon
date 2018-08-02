@@ -1,7 +1,7 @@
-from launcher import *
-from tracker import *
+
 from operator import itemgetter
 from functools import reduce
+from launcher import parse_file
 
 def calc_share_ratios(list_prio, cores):
     """ Basic Shares calculator"""
@@ -101,23 +101,56 @@ def first_allocation(power, cores, app_file):
     high = [r for r in list_procs if r[3] < 0]
     low = [r for r in list_procs if r[3] > 0]
 
-    extra_pwr, hi_limits, shares_high = power_shares_loop(limit, high, max_per_core, cores)
-    print("Pwer left = ", extra_pwr)
+    high_set = None
+    low_set = None
+
+    if len(high) == 0:
+        # we got no High Powe applications
+        high_set = None
+        extra_pwr = limit
+    else:
+        extra_pwr, hi_limits, shares_high = power_shares_loop(limit, high, max_per_core, cores)
+        print("Pwer left = ", extra_pwr)
+        high_set = (hi_limits, shares_high, high)
 
     if int(round(extra_pwr, 0)) > 0:
         # We have power for low priority
         # First check if we have cores avialable
         cores_avil = cores-len(high)
-        lo_power, lo_limits, shares_lo = power_shares_loop(extra_pwr, low, max_per_core, cores_avil)
-        return lo_power, (hi_limits, shares_high, high), (lo_limits, shares_lo, low)
+        extra_pwr, lo_limits, shares_lo = power_shares_loop(extra_pwr, low, max_per_core, cores_avil)
+        low_set = (lo_limits, shares_lo, low)
 
-    return extra_pwr, (hi_limits, shares_high, high), (None, None, low)
+    return extra_pwr, high_set, low_set
+
+def get_list_limits(power, cores, app_file):
+    extra_power, high_set, low_set = first_allocation(power, cores, app_file)
+    all_limits = None
+    all_apps = None
+
+    if not high_set is None:
+        #We have high_prio apps
+        all_limits = high_set[0]
+        all_apps = high_set[2]
+
+    if not low_set is None:
+        #We have low_prio apps
+        all_limits += low_set[0]
+        all_apps += low_set[2]        # Nothing to Run
+        # set cores to idle
+
+    return all_apps, all_limits
 
 
-
-for lim, cor in zip([25, 30, 35, 40],[4, 4, 4, 4]):
-    a,b,c = first_allocation(lim, cor, "inputs/input3")
-    print(lim, cor)
-    print(a, b[0], c[0])
-    print("__")
-#        shares_per_watt = [x[2]/y for x,y in zip(_proc,  limit_per_core)]
+def test():
+    for infile in ["inputs/input3", "inputs/i3070", "./inputs/input10050"]:
+        for lim, cor in zip([25, 30, 35, 40],[4, 4, 4, 4]):
+            a,b,c = first_allocation(lim, cor, infile)
+            print(lim, cor)
+            if c is None :
+                print(a, b[0], "None")
+            if b is None :
+                print(a, "None", c[0])
+            else:
+                print(a, b[0], c[0])
+            print("-------")
+        print("________________")
