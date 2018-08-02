@@ -37,14 +37,14 @@ def calc_share_ratios_2(list_prio, inc_cores, ratios):
 def power_shares_loop(limit, _proc, max_per_core, cores):
     shares_app = calc_share_ratios(_proc, cores)
     left_over_pwr = limit
-    limit_per_core = 0
+    limit_per_core = None
 
     # allocate
     if limit > len(_proc)*max_per_core:
         # Have more power than needs allocation
         limit_per_core = [max_per_core]*len(_proc)
-        left_over_pwr = limit - len(_proc)*max_per_core
-        return left_over_pwr, limit_per_core
+        left_over_pwr = left_over_pwr - len(_proc)*max_per_core
+        return left_over_pwr, limit_per_core, shares_app
 
     # Allocate and check
     limit_per_core = [min(r*limit, max_per_core) for r in shares_app]
@@ -53,45 +53,46 @@ def power_shares_loop(limit, _proc, max_per_core, cores):
     print("FIRST ALLOCATION", cores_to_include, limit_per_core)
     count = 0
 
-    while sum(limit_per_core) < limit:
+    # Check for leftover power
+    left_over_pwr = left_over_pwr - sum(limit_per_core)
+
+    while int(round(left_over_pwr, 0)) > 0:
         # we have left over power
-        left_over_pwr = limit - sum(limit_per_core)
 
         if int(round(left_over_pwr, 0) == 0):
-            print("ERROR")
+            print("END")
             break
-        if left_over_pwr < 0:
-            # Should not happens
-            print("ERROR")
+
+        if reduce((lambda x, y: x and y), cores_to_include):
+            left_over_pwr = left_over_pwr - sum(limit_per_core)
             break
 
         # redistribute this power among the apps that didn't recieve it in the last
         # round of proportional share calculations
         #   find apps and shares to consider
-        cores_to_include = [False if r >= max_per_core else True for r in limit_per_core]
-        if reduce((lambda x, y: x and y), cores_to_include):
-            break
         ncores = len([x for x in cores_to_include if x])
         if ncores == 1:
             limit_per_core = [min(l+(1*left_over_pwr), max_per_core) if c else l for l, c in zip(limit_per_core, cores_to_include)]
-         ### Exit at this point
+            left_over_pwr = left_over_pwr - sum(limit_per_core)
             break
         elif ncores < 1:
             # Excess power
             break
         else:
-            ratios = calc_share_ratios_2(_proc, shares_app, cores_to_include)
-            limit_per_core = [min(l+(r*left_over_pwr), max_per_core) if c else l for l, r, c in zip(limit_per_core, ratios, cores_to_include)]
-            print(str(count), left_over_pwr, limit_per_core, ratios)
+            shares_app = calc_share_ratios_2(_proc, shares_app, cores_to_include)
+            limit_per_core = [min(l+(r*left_over_pwr), max_per_core) if c else l for l, r, c in zip(limit_per_core, shares_app, cores_to_include)]
+            print(str(count), left_over_pwr, limit_per_core, shares_app)
         count += 1
 
-    left_over_pwr = limit - sum(limit_per_core)
+        cores_to_include = [False if r >= max_per_core else True for r in limit_per_core]
+        left_over_pwr = left_over_pwr - sum(limit_per_core)
+    print("Pwer left = ", left_over_pwr)
+    left_over_pwr = 0 if left_over_pwr < 0 else left_over_pwr
+    return left_over_pwr, limit_per_core, shares_app
 
-    return left_over_pwr, limit_per_core
 
-
-def test(power, cores):
-    list_procs = parse_file("inputs/input3")
+def first_allocation(power, cores, app_file):
+    list_procs = parse_file(app_file)
     list_procs.sort(key=itemgetter(3))
 
     limit = power*1000
@@ -100,14 +101,23 @@ def test(power, cores):
     high = [r for r in list_procs if r[3] < 0]
     low = [r for r in list_procs if r[3] > 0]
 
-    left_over_pwr, _limits = power_shares_loop(limit, high, max_per_core, cores)
-    if left_over_pwr > 0:
+    extra_pwr, hi_limits, shares_high = power_shares_loop(limit, high, max_per_core, cores)
+    print("Pwer left = ", extra_pwr)
+
+    if int(round(extra_pwr, 0)) > 0:
         # We have power for low priority
         # First check if we have cores avialable
         cores_avil = cores-len(high)
-        low_power, low_limits = power_shares_loop(limit, high, max_per_core, cores_avil)
-    else:
-        return (left_over_pwr, _limits, high),(None, None, low)
+        lo_power, lo_limits, shares_lo = power_shares_loop(extra_pwr, low, max_per_core, cores_avil)
+        return lo_power, (hi_limits, shares_high, high), (lo_limits, shares_lo, low)
 
-test()
+    return extra_pwr, (hi_limits, shares_high, high), (None, None, low)
+
+
+
+for lim, cor in zip([25, 30, 35, 40],[4, 4, 4, 4]):
+    a,b,c = first_allocation(lim, cor, "inputs/input3")
+    print(lim, cor)
+    print(a, b[0], c[0])
+    print("__")
 #        shares_per_watt = [x[2]/y for x,y in zip(_proc,  limit_per_core)]
