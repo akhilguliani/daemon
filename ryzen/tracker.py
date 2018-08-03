@@ -87,6 +87,13 @@ class PerCoreTracker(dict):
             self[key] = abs(value)
         return self
 
+    def scalar_div(self, val):
+        rv = PerCoreTracker()
+        ret = True
+        for key, value in self.items():
+            rv[key] = value / val
+        return rv
+
     def scalar_mul(self, val):
         for key, value in self.items():
             self[key] = value * val
@@ -130,5 +137,13 @@ def update_delta(before, after):
         return ret
     else:
         # no overflow return difference
+        return after - before
+
+def update_pkg(before, after):
+    if (before is None) or (after is None):
+        return 0
+    if  (after < before):
+        return 0x100000000 + after
+    else:
         return after - before
 
