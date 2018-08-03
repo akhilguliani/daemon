@@ -18,18 +18,18 @@ import os
 import signal
 import subprocess
 from time import sleep
+from multiprocessing import Process
+import shlex
 import psutil
 import matplotlib.pyplot as plt
-import sys
 from docopt import docopt
 from schema import Schema, And, Or, Use, SchemaError
 from topology import cpu_tree
-from msr import AMD_MSR_CORE_ENERGY, writemsr, readmsr, get_percore_msr, get_percore_energy, get_units, setup_perf, get_package_energy
-from tracker import PerCoreTracker, update_delta, update_delta_32, update_pkg
+# from msr import writemsr, readmsr, get_percore_msr
+from tracker import PerCoreTracker
 from frequency import *
-from launcher import *
-from operator import itemgetter
-from multiprocessing import Process
+from launcher import run_on_multiple_cores_forever, launch_on_core, wait_for_procs
+from helper import EnergyTracker
 from shares import get_list_limits
 
 def signal_handler(_signal, _frame):
@@ -45,6 +45,15 @@ def check_for_sudo_and_msr():
     else:
         # ensure modprobe msr is run
         subprocess.run(["modprobe", "msr"])
+
+def setup_perf():
+    perf_dir = "/mydata/linux-4.17.8/tools/perf"
+    perf_args = shlex.split("./perf stat -I 1000 -e instructions -A -x ,")
+    return subprocess.Popen(perf_args, stderr=subprocess.PIPE, cwd=perf_dir, universal_newlines=True)
+
+def get_perf(perf_obj, num_cores):
+    ret = [int(perf_obj.stderr.readline().strip().split(",")[2]) for i in range(psutil.cpu_count())]
+    return ret[:num_cores]
 
 def launch_all(list_proc):
     """Launch all the process in the list on successive cores"""
@@ -106,7 +115,7 @@ def plot_all(freq_dict, pwr_dict, perf_dict, tick, cpus, pwr_limits):
     return
 
 
-def main(arg1, energy_unit, tree):
+def main(arg1, perf_file, tree):
     """
     Main funtion loop.
 
@@ -120,17 +129,18 @@ def main(arg1, energy_unit, tree):
         CPU topology tree
    """
 
-    perf_msr = 0xC00000E9
-    # get cpu id's as a list
-    cpus = [list(tree[0][i].keys())[0] for i in range(psutil.cpu_count(logical=False))]
+    # get cpu id's as a list # topolgy function not parsing for intel
+    #TODO: replace hard code later
+    cpus = range(int(psutil.cpu_count(logical=False)/2))
+    print(cpus)
 
-    track_energy = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
+    track_energy = EnergyTracker(100)
     track_perf = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
-    power_tracker = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
+    power_tracker = 0
 
     sum_freq = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
     sum_perf = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
-    sum_power = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
+    sum_power = 0
 
     first = True
     old_freq = [None] * len(cpus)
@@ -145,8 +155,8 @@ def main(arg1, energy_unit, tree):
         limits = [max_per_core]*cores
     else:
         cores = len(limits)
-    
-    wait_thread = Process(target = run_on_multiple_cores_forever, args=(proc_list, None))
+
+    wait_thread = Process(target=run_on_multiple_cores_forever, args=(proc_list, cpus[:cores]))
 
     # change = PerCoreTracker()
 #    limits = [5000, 8000, 6000, 10000]
@@ -155,49 +165,48 @@ def main(arg1, energy_unit, tree):
 #    wait_thread = Process(target=launch_all_with_post_fn, args=(high, exit_when_done))
     wait_thread.start()
 
+    interval = int(arg1['--interval'])
     while True:
-        pwr_before = PerCoreTracker(dict(zip(cpus, get_percore_energy(cpus))))
-        perf_before = PerCoreTracker(dict(zip(cpus, get_percore_msr(perf_msr, cpus))))
-        package_before = get_package_energy()
-        sleep(int(arg1['--interval']))
 
-        pwr_after = PerCoreTracker(dict(zip(cpus, get_percore_energy(cpus))))
-        perf_after = PerCoreTracker(dict(zip(cpus, get_percore_msr(perf_msr, cpus))))
-        package_after = get_package_energy()
+        prev_energy = track_energy.get_update_energy()
 
-        power_delta = update_delta_32(pwr_before, pwr_after)
-        track_energy = track_energy + power_delta.scalar_mul(energy_unit)
-        power_delta.scalar_mul(1000)
+        sleep(interval)
 
-        perf_delta = update_delta(perf_before, perf_after)
-        package_pwr = update_pkg(package_before, package_after) * energy_unit * 1000
-
+        perf_delta = PerCoreTracker(dict(zip(cpus, get_perf(perf_file,len(cpus)))))
+        package_pwr = track_energy.get_power(prev_energy, interval)
         ## Percent change
         if first:
-            power_tracker = power_delta
+            power_tracker = package_pwr
             track_perf = perf_delta
         else:
             # change = (abs(power_delta - power_tracker) / power_tracker).scalar_mul(100)
-            power_tracker = (power_tracker).scalar_mul(0.7) + (power_delta).scalar_mul(0.3)
+            power_tracker = (power_tracker)*(0.7) + (package_pwr)*(0.3)
             track_perf = track_perf.scalar_mul(0.7) + perf_delta.scalar_mul(0.3)
 
         for i in range(cores):
-            # if change == {} or (change[cpus[i]] < 1 and delta[cpus[i]] < limits[i]):
-            #     continue
-            # if i == 0:
-            #     continue
-            old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first)
+            pass
+            ## Write a new controller that takes in shares and power -> affects frequency
+            # for Mixed priorities this controller also takes in core priorities with shares
+            ### Lower Priority gets throttled to minimum till:
+            ############# RAPL Limit Starts to drop
+            ############# Or We have reached the lowest frequency (here we can start using DC to go lower)
+            #### At lowest freq we should check how much HP is throttled, if below a threshold, then starve LP
+            ## With Shares when we have to throttle the HP cores we do bin packing (Freq Shares we do 22 rounds for 22 levels)
+            ###### At each level if the shares of the cores lie within threshold, we reduce their freq by one step starting from current
+            ###### We also reduce the shares by the threshold delta (this way all apps get throttled eventually, and proportionally)
+            ######## We continue with this trend till the power drops below limit or we reach
+            # old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first)
         count = count + 1
-        
+
         f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
         sum_perf = sum_perf + perf_delta
         sum_freq = sum_freq + f_dict
         sum_power = sum_power + power_tracker
 
-        print(round(sum_power.scalar_div(count), 0))
+        print(round(sum_power/(count), 0))
         print(round(sum_freq.scalar_div(count), 0))
         print(round(sum_perf.scalar_div(count), 0))
-        print(count, (power_limit*1000) - round(sum((sum_power[i*2] for i in range(cores)))/count, 2), package_pwr, sep=", ")
+        print(count, (power_limit*1000) - round(sum_power/count, 2), package_pwr, sep=", ")
 
         print("---------------")
         # print(round(power_tracker, 3))
@@ -205,7 +214,7 @@ def main(arg1, energy_unit, tree):
         # print(round(perf_delta, 3), "\n________")
 
         first = False
-        plot_all(f_dict, power_tracker, track_perf, count, cpus[:len(limits)], limits)
+        # plot_all(f_dict, power_tracker, track_perf, count, cpus[:len(limits)], limits)
 
 ## Starting point
 if __name__ == "__main__":
@@ -230,8 +239,7 @@ if __name__ == "__main__":
     check_for_sudo_and_msr()
     # get cpu topology
     tree = cpu_tree()
-    setup_perf()
-    energy_unit = get_units()
+    perf_file = setup_perf()
     set_gov_userspace()
     set_to_max_freq()
-    main(ARGUMENTS, energy_unit, tree)
+    main(ARGUMENTS, perf_file, tree)

@@ -4,8 +4,8 @@ import os
 from time import time
 import shlex
 import subprocess
-import psutil
 from multiprocessing import Process
+import psutil
 
 def parse_file(file_path):
     """Parse input file and return list of programs with thier dir annd shares"""
@@ -14,7 +14,7 @@ def parse_file(file_path):
         count = 1
         local = []
         for line in pfile:
-            if "#" in line:
+            if line[0] == '#':
                 continue
             if "@" in line:
                 if local != []:
@@ -233,6 +233,33 @@ def run_on_cores_restart(process_info_list, copies=1, cores=None, rstrt_even=Fal
         for _c_pid in restarted:
             try:
                 os.killpg(os.getpgid(p.pid), 15)
+            except:
+                pass
+    return
+
+def run_on_multiple_cores_forever(process_info_list, cores=None):
+    """ Take the output from parse_file and launch the processes on cores=[cpu,...] """
+    # check if proc list is None
+    if process_info_list is None:
+        return
+    # one more check for len(process_info_list) == len(cores)
+    if cores is None:
+        cores = range(len(process_info_list))
+
+    restarted = []
+    for cpu in cores:
+        process_info = process_info_list[cpu]
+        _p_rst = None
+        # Fixed cpu number for intel platform
+        _p_rst = Process(target=run_on_core_forever, args=(process_info, cpu))
+        _p_rst.start()
+        restarted.append(_p_rst)
+
+    if len(restarted) >= 1:
+        # kill all restrted processes
+        for _proc in restarted:
+            try:
+                _proc.start()
             except:
                 pass
     return
