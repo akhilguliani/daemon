@@ -45,6 +45,10 @@ def get_percore_energy(cpulist=[0]):
     """ Return per core energy MSR value for Ryzen """
     return [readmsr(AMD_MSR_CORE_ENERGY, i) & 0xFFFFFFFF for i in cpulist]
 
+def get_package_energy():
+    """ Return per package energy MSR value for Ryzen """
+    return readmsr(AMD_MSR_PACKAGE_ENERGY, 0) & 0xFFFFFFFF
+
 def get_units():
     """ Get the various units for Power Units MSR """
     result = readmsr(AMD_MSR_PWR_UNIT, 0)

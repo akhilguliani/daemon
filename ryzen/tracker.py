@@ -139,3 +139,11 @@ def update_delta(before, after):
         # no overflow return difference
         return after - before
 
+def update_pkg(before, after):
+    if (before is None) or (after is None):
+        return 0
+    if  (after < before):
+        return 0x100000000 + after
+    else:
+        return after - before
+
