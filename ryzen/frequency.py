@@ -35,7 +35,7 @@ def set_gov_userspace():
         print("Unspported Driver: please enable intel/acpi_cpufreq from kerenl cmdline")
 
 def quantize(value):
-    ret = math.ceil(value / 100000, 0)
+    ret = int(round(value / 100000, 0))
     return ret*100000
 
 def read_freq(cpu=0):
@@ -283,8 +283,9 @@ def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limi
             # Above limit
             # We have no excess power
             # Reduce freq for high priority cores by one step
+            first_core = 0 if high_cpus == [] else high_cpus[0]
+            curr_freq = int(read_freq(cpu=first_core))
             for core in high_cpus:
-                curr_freq = int(read_freq(cpu=core))
                 write_freq(curr_freq - step, cpu=core)
                 write_freq(curr_freq - step, cpu=20+core)
             return False
@@ -297,8 +298,10 @@ def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limi
             # We have excess power
             # First Check if high power apps are at max freq
             update_lp = False
+            print("Below limit updating")
+            first_core = 0 if high_cpus == [] else high_cpus[0]
+            curr_freq = int(read_freq(cpu=first_core))
             for core in high_cpus:
-                curr_freq = int(read_freq(cpu=core))
                 if curr_freq < bounds[1]:
                     write_freq(curr_freq + step, cpu=core)
                     write_freq(curr_freq + step, cpu=20+core)
@@ -317,8 +320,9 @@ def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limi
             # Above limit
             # We have no excess power
             # Reduce freq for high priority cores by one step
+            first_core = 0 if high_cpus == [] else high_cpus[0]
+            curr_freq = int(read_freq(cpu=first_core))
             for core in high_cpus:
-                curr_freq = read_freq(cpu=core)
                 write_freq(curr_freq - step, cpu=core)
                 write_freq(curr_freq - step, cpu=20+core)
             return False

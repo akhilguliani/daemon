@@ -3,7 +3,7 @@
 by Akhil Guliani
 
 Usage:
-    main.py [-i FILE] [--interval=<seconds>] [--limit=<watts>] PID...
+    main.py [-i FILE] [--interval=<seconds>] [--limit=<watts>] [--cores=<num>] PID...
 
 Arguments:
     PID     pids to track
@@ -148,13 +148,13 @@ def main(arg1, perf_file, tree):
     old_freq = [None] * len(cpus)
     count = 0
     proc_file = arg1['--input']
-    power_limit = arg1['--limit']
-    cores = arg1['--cores']
+    power_limit = int(arg1['--limit'])*1000
+    cores = int(arg1['--cores'])
     max_per_core = 10000
     #proc_list, limits = get_list_limits(power_limit, cores, proc_file)
-    
+
     high_list, high_cores, low_list, low_cores = get_lists(power_limit, cores, proc_file)
-    
+
     # if limits is None:
     #     limits = [max_per_core]*cores
     # else:
@@ -170,7 +170,7 @@ def main(arg1, perf_file, tree):
     wait_high_threads.start()
     run_lp = False
     interval = int(arg1['--interval'])
-    
+
     while True:
 
         prev_energy = track_energy.get_update_energy()
@@ -185,18 +185,18 @@ def main(arg1, perf_file, tree):
             track_perf = perf_delta
         else:
             # change = (abs(power_delta - power_tracker) / power_tracker).scalar_mul(100)
-            power_tracker = (power_tracker)*(0.7) + (package_pwr)*(0.3)
+            power_tracker = (power_tracker)*(0.3) + (package_pwr)*(0.7)
             track_perf = track_perf.scalar_mul(0.7) + perf_delta.scalar_mul(0.3)
 
         # for i in range(cores):
         #     pass
-        if count <= 5:
+        if count == 5:
             ## High Prio Apps Ramped up
             run_lp = keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=True, lp_active=run_lp)
             if run_lp:
                 wait_low_threads.start()
-        else:
-            keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=True, lp_active=run_lp)
+        elif count > 5:
+            keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=False, lp_active=run_lp)
         count = count + 1
 
         f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
@@ -207,7 +207,7 @@ def main(arg1, perf_file, tree):
         print(round(sum_power/(count), 0))
         print(round(sum_freq.scalar_div(count), 0))
         print(round(sum_perf.scalar_div(count), 0))
-        print(count, (power_limit*1000) - round(sum_power/count, 2), package_pwr, sep=", ")
+        print(count, (power_limit) - round(sum_power/count, 2), power_tracker, sep=", ")
 
         print("---------------")
         # print(round(power_tracker, 3))
@@ -225,15 +225,15 @@ if __name__ == "__main__":
     # Check Command line arguments
     SCHEMA = Schema({
         '--input': Or(None, And(Use(open,
-            error='input FILE should be readable'))),
+                                    error='input FILE should be readable'))),
         '--interval': Or(None, And(Use(int), lambda n: 0 < n < 1000),
-            error='--interval=N should be integer 0 < N < 1000'),
+                         error='--interval=N should be integer 0 < N < 1000'),
         '--limit': Or(None, And(Use(int), lambda n: 25 < n < 85),
-            error='--limit=N should be integer 30 < N < 85'),
-        '--interval': Or(None, And(Use(int), lambda n: 3 < n < 11),
-            error='--cores=N should be integer 3 < N < 11'),
+                      error='--limit=N should be integer 30 < limit < 85'),
+        '--cores': Or(None, And(Use(int), lambda n: 0 < n < 11),
+                      error='--cores=N should be integer 0 < num < 11'),
         'PID': [Or(None, And(Use(int), lambda n: 1 < n < 32768),
-            error='PID should be inteager within 1 < N < 32768')],
+                   error='PID should be inteager within 1 < N < 32768')],
         })
     try:
         ARG_VALIDATE = SCHEMA.validate(ARGUMENTS)

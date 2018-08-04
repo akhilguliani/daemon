@@ -149,17 +149,19 @@ def get_lists(power, cores, app_file):
     high_cores = []
     low_cores = []
     lp_avil = False
-    if len(high) >= cores: 
-        high_cores = range(cores) 
-        low = None
-        lp_avil = False
-    elif len(high) > 0:
-        high_cores = range(len(high))
-        lp_avil = True
-    if len(low) > 0 and lp_avil:
-        low_cores = range(min(cores - len(high), len(low)))
-    elif len(low) == 0:
-        low = None
+    if not (high is None):
+        if len(high) >= cores:
+            high_cores = range(cores)
+            low = None
+            lp_avil = False
+        elif len(high) >= 1:
+            high_cores = range(len(high))
+            if not (low is None):
+                low_cores = range(len(high_cores), min(cores - len(high_cores), len(low)))
+    else:
+        if not (low is None):
+            low_cores = range(min(cores, len(low)))
+
     return high, high_cores, low, low_cores
 
 
