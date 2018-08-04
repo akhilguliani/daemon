@@ -2,6 +2,7 @@
 import psutil
 import subprocess
 import time
+import math
 from msr import update_pstate_freq
 
 def get_freq_bounds(cpu=0):
@@ -34,7 +35,7 @@ def set_gov_userspace():
         print("Unspported Driver: please enable intel/acpi_cpufreq from kerenl cmdline")
 
 def quantize(value):
-    ret = round(value / 100000)
+    ret = math.ceil(value / 100000, 0)
     return ret*100000
 
 def read_freq(cpu=0):
@@ -244,6 +245,83 @@ def keep_limit(curr_power, limit=10000, cpu=0, last_freq=None, first_limit=True)
             # print("Increase")
             change_freq(new_limit, cpu, increase=True)
     return old_freq
+
+def keep_limit_proportional():
+    ## Write a new controller that takes in shares and power -> affects frequency
+    # for Mixed priorities this controller also takes in core priorities with shares
+    ### Lower Priority gets throttled to minimum till:
+    ############# RAPL Limit Starts to drop
+    ############# Or We have reached the lowest frequency (here we can start using DC to go lower)
+    #### At lowest freq we should check how much HP is throttled, if below a threshold, then starve LP
+    ## With Shares when we have to throttle the HP cores we do bin packing (Freq Shares we do 22 rounds for 22 levels)
+    ###### At each level if the shares of the cores lie within threshold, we reduce their freq by one step starting from current
+    ###### We also reduce the shares by the threshold delta (this way all apps get throttled eventually, and proportionally)
+    ######## We continue with this trend till the power drops below limit or we reach
+    # old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first)
+    pass
+
+def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limit=True, lp_active=False):
+    """ Follow the power limit for Intel skylake priority only"""
+    tolerance = 500
+    step = 100000
+    bounds = get_freq_bounds()
+
+    if first_limit:
+        # Check if we are above limt
+        if abs(curr_power - limit) < tolerance:
+            # at power limit
+            return False
+        elif (curr_power - limit) < -1*tolerance:
+            # Below limit
+            # We have excess power for low priority
+            # Set low prio cores to lowest freq
+            for core in low_cpus:
+                write_freq(800000, cpu=core)
+                write_freq(800000, cpu=20+core)
+            return True
+        elif (curr_power - limit) > tolerance:
+            # Above limit
+            # We have no excess power
+            # Reduce freq for high priority cores by one step
+            for core in high_cpus:
+                curr_freq = int(read_freq(cpu=core))
+                write_freq(curr_freq - step, cpu=core)
+                write_freq(curr_freq - step, cpu=20+core)
+            return False
+    else:
+        if abs(curr_power - limit) < tolerance:
+            # at power limit
+            return False
+        elif (curr_power - limit) < -1*tolerance:
+            # Below limit
+            # We have excess power
+            # First Check if high power apps are at max freq
+            update_lp = False
+            for core in high_cpus:
+                curr_freq = int(read_freq(cpu=core))
+                if curr_freq < bounds[1]:
+                    write_freq(curr_freq + step, cpu=core)
+                    write_freq(curr_freq + step, cpu=20+core)
+                elif curr_freq >= bounds[1]:
+                    update_lp = update_lp and True
+                    # we can increase power for low priority tasks
+            if update_lp and lp_active:
+                for core in low_cpus:
+                    curr_freq = int(read_freq(cpu=core))
+                    if curr_freq < bounds[1]:
+                        write_freq(curr_freq + step, cpu=core)
+                        write_freq(curr_freq + step, cpu=20+core)
+                return True
+            return False
+        elif (curr_power - limit) > tolerance:
+            # Above limit
+            # We have no excess power
+            # Reduce freq for high priority cores by one step
+            for core in high_cpus:
+                curr_freq = read_freq(cpu=core)
+                write_freq(curr_freq - step, cpu=core)
+                write_freq(curr_freq - step, cpu=20+core)
+            return False
 
 def set_rapl_limit(limit):
     """ set rapl limit in watts """

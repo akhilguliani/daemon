@@ -140,6 +140,28 @@ def get_list_limits(power, cores, app_file):
 
     return all_apps, all_limits
 
+def get_lists(power, cores, app_file):
+    """ get high and low priority cores """
+    list_procs = parse_file(app_file)
+    list_procs.sort(key=itemgetter(3))
+    high = [r for r in list_procs if r[3] < 0]
+    low = [r for r in list_procs if r[3] > 0]
+    high_cores = []
+    low_cores = []
+    lp_avil = False
+    if len(high) >= cores: 
+        high_cores = range(cores) 
+        low = None
+        lp_avil = False
+    elif len(high) > 0:
+        high_cores = range(len(high))
+        lp_avil = True
+    if len(low) > 0 and lp_avil:
+        low_cores = range(min(cores - len(high), len(low)))
+    elif len(low) == 0:
+        low = None
+    return high, high_cores, low, low_cores
+
 
 def test():
     for infile in ["inputs/input3", "inputs/i3070", "./inputs/input10050"]:

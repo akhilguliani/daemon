@@ -3,7 +3,7 @@
 by Akhil Guliani
 
 Usage:
-    main.py [-i FILE] [--interval=<seconds>] PID...
+    main.py [-i FILE] [--interval=<seconds>] [--limit=<watts>] PID...
 
 Arguments:
     PID     pids to track
@@ -12,6 +12,8 @@ Options:
     -h
     -i FILE --input=FILE    file with pids to monitor and their control params
     --interval=<seconds>   max amount of time in minutes to keep the daemon alive
+    --limit=<watts>   RAPL limit
+    --cores=<num>   Number of cores
 """
 
 import os
@@ -30,12 +32,12 @@ from tracker import PerCoreTracker
 from frequency import *
 from launcher import run_on_multiple_cores_forever, launch_on_core, wait_for_procs
 from helper import EnergyTracker
-from shares import get_list_limits
+from shares import get_list_limits, get_lists
 
 def signal_handler(_signal, _frame):
     """ Handle SIGINT"""
     print("\nExiting ...")
-    plt.show()
+    #plt.show()
     exit(0)
 
 def check_for_sudo_and_msr():
@@ -146,26 +148,29 @@ def main(arg1, perf_file, tree):
     old_freq = [None] * len(cpus)
     count = 0
     proc_file = arg1['--input']
-    power_limit = 25
-    cores = 4
+    power_limit = arg1['--limit']
+    cores = arg1['--cores']
     max_per_core = 10000
-    proc_list, limits = get_list_limits(power_limit, cores, proc_file)
+    #proc_list, limits = get_list_limits(power_limit, cores, proc_file)
+    
+    high_list, high_cores, low_list, low_cores = get_lists(power_limit, cores, proc_file)
+    
+    # if limits is None:
+    #     limits = [max_per_core]*cores
+    # else:
+    #     cores = len(limits)
 
-    if limits is None:
-        limits = [max_per_core]*cores
-    else:
-        cores = len(limits)
-
-    wait_thread = Process(target=run_on_multiple_cores_forever, args=(proc_list, cpus[:cores]))
-
+    wait_high_threads = Process(target=run_on_multiple_cores_forever, args=(high_list, high_cores))
+    wait_low_threads = Process(target=run_on_multiple_cores_forever, args=(low_list, low_cores))
     # change = PerCoreTracker()
 #    limits = [5000, 8000, 6000, 10000]
 #    wait_thread = Process(target=launch_all, args=(high,))
 
 #    wait_thread = Process(target=launch_all_with_post_fn, args=(high, exit_when_done))
-    wait_thread.start()
-
+    wait_high_threads.start()
+    run_lp = False
     interval = int(arg1['--interval'])
+    
     while True:
 
         prev_energy = track_energy.get_update_energy()
@@ -183,19 +188,15 @@ def main(arg1, perf_file, tree):
             power_tracker = (power_tracker)*(0.7) + (package_pwr)*(0.3)
             track_perf = track_perf.scalar_mul(0.7) + perf_delta.scalar_mul(0.3)
 
-        for i in range(cores):
-            pass
-            ## Write a new controller that takes in shares and power -> affects frequency
-            # for Mixed priorities this controller also takes in core priorities with shares
-            ### Lower Priority gets throttled to minimum till:
-            ############# RAPL Limit Starts to drop
-            ############# Or We have reached the lowest frequency (here we can start using DC to go lower)
-            #### At lowest freq we should check how much HP is throttled, if below a threshold, then starve LP
-            ## With Shares when we have to throttle the HP cores we do bin packing (Freq Shares we do 22 rounds for 22 levels)
-            ###### At each level if the shares of the cores lie within threshold, we reduce their freq by one step starting from current
-            ###### We also reduce the shares by the threshold delta (this way all apps get throttled eventually, and proportionally)
-            ######## We continue with this trend till the power drops below limit or we reach
-            # old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first)
+        # for i in range(cores):
+        #     pass
+        if count <= 5:
+            ## High Prio Apps Ramped up
+            run_lp = keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=True, lp_active=run_lp)
+            if run_lp:
+                wait_low_threads.start()
+        else:
+            keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=True, lp_active=run_lp)
         count = count + 1
 
         f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
@@ -227,6 +228,10 @@ if __name__ == "__main__":
             error='input FILE should be readable'))),
         '--interval': Or(None, And(Use(int), lambda n: 0 < n < 1000),
             error='--interval=N should be integer 0 < N < 1000'),
+        '--limit': Or(None, And(Use(int), lambda n: 25 < n < 85),
+            error='--limit=N should be integer 30 < N < 85'),
+        '--interval': Or(None, And(Use(int), lambda n: 3 < n < 11),
+            error='--cores=N should be integer 3 < N < 11'),
         'PID': [Or(None, And(Use(int), lambda n: 1 < n < 32768),
             error='PID should be inteager within 1 < N < 32768')],
         })
@@ -242,4 +247,5 @@ if __name__ == "__main__":
     perf_file = setup_perf()
     set_gov_userspace()
     set_to_max_freq()
+    setup_rapl()
     main(ARGUMENTS, perf_file, tree)
