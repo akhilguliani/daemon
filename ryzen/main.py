@@ -228,7 +228,7 @@ if __name__ == "__main__":
                                     error='input FILE should be readable'))),
         '--interval': Or(None, And(Use(int), lambda n: 0 < n < 1000),
                          error='--interval=N should be integer 0 < N < 1000'),
-        '--limit': Or(None, And(Use(int), lambda n: 25 < n < 85),
+        '--limit': Or(None, And(Use(int), lambda n: 25 < n < 86),
                       error='--limit=N should be integer 30 < limit < 85'),
         '--cores': Or(None, And(Use(int), lambda n: 0 < n < 11),
                       error='--cores=N should be integer 0 < num < 11'),
