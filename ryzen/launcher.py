@@ -194,6 +194,7 @@ def run_on_cores_restart2(process_info_list, copies=1, cores=None, rstrt_even=Fa
             except:
                 pass
     return
+
 def run_on_cores_restart(process_info_list, copies=1, cores=None, rstrt_even=False):
     """ Take the output from parse_file and launch the processes on cores=[cpu,...] """
     # Ensure size of cores and process_info_list is same
@@ -263,3 +264,32 @@ def run_on_multiple_cores_forever(process_info_list, cores=None):
             except:
                 pass
     return
+
+def run_on_multiple_cores_timeout(process_info_list, cores=None, timeout=None):
+    """ Take the output from parse_file and launch the processes on cores=[cpu,...] """
+    # check if proc list is None
+    if process_info_list is None:
+        return
+    # one more check for len(process_info_list) == len(cores)
+    if cores is None:
+        cores = range(len(process_info_list))
+
+    restarted = []
+    for cpu in cores:
+        process_info = process_info_list[cpu % len(process_info_list)]
+        _p_rst = None
+        # Fixed cpu number for intel platform
+        _p_rst = Process(target=run_on_core_forever, args=(process_info, cpu))
+        _p_rst.start()
+        restarted.append(_p_rst)
+
+    if len(restarted) >= 1:
+        # Wait on first started process
+        restarted[0].join(timeout)
+        # kill all restrted processes
+        # for _proc in restarted:
+        #     try:
+        #         _proc.kill()
+        #     except:
+        #         pass
+    return restarted
