@@ -7,7 +7,7 @@ results/*
 *.out
 rapl_*
 input2
-
+.vscode
 # C extensions
 *.so
 
