@@ -155,12 +155,12 @@ def get_lists(power, cores, app_file):
             low = None
             lp_avil = False
         elif len(high) >= 1:
-            high_cores = range(len(high))
+            high_cores = range(0,len(high))
             if not (low is None):
-                low_cores = range(len(high_cores), min(cores - len(high_cores), len(low)))
+                low_cores = range(len(high_cores), len(high_cores)+ 1 + min(cores - len(high_cores), len(low)))
     else:
         if not (low is None):
-            low_cores = range(min(cores, len(low)))
+            low_cores = range(0, min(cores, len(low)))
 
     return high, high_cores, low, low_cores
 

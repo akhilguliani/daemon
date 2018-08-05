@@ -155,6 +155,8 @@ def main(arg1, perf_file, tree):
 
     high_list, high_cores, low_list, low_cores = get_lists(power_limit, cores, proc_file)
 
+    print("High", len(high_list), high_cores)
+    print("Low", len(low_list), low_cores)
     # if limits is None:
     #     limits = [max_per_core]*cores
     # else:

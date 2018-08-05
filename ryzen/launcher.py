@@ -248,21 +248,14 @@ def run_on_multiple_cores_forever(process_info_list, cores=None):
         cores = range(len(process_info_list))
 
     restarted = []
-    for cpu in cores:
-        process_info = process_info_list[cpu]
+    for i, cpu in enumerate(cores):
+        process_info = process_info_list[i]
         _p_rst = None
         # Fixed cpu number for intel platform
         _p_rst = Process(target=run_on_core_forever, args=(process_info, cpu))
         _p_rst.start()
         restarted.append(_p_rst)
 
-    if len(restarted) >= 1:
-        # kill all restrted processes
-        for _proc in restarted:
-            try:
-                _proc.start()
-            except:
-                pass
     return
 
 def run_on_multiple_cores_timeout(process_info_list, cores=None, timeout=None):

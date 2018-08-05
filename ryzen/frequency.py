@@ -305,7 +305,7 @@ def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limi
                 if curr_freq < bounds[1]:
                     write_freq(curr_freq + step, cpu=core)
                     write_freq(curr_freq + step, cpu=20+core)
-                elif curr_freq >= bounds[1]:
+                elif curr_freq >= 2200000 :
                     update_lp = update_lp and True
                     # we can increase power for low priority tasks
             if update_lp and lp_active:

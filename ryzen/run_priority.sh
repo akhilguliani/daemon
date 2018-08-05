@@ -1,9 +1,11 @@
-for fname in prio_10_0 prio_10_3	prio_10_5 prio_10_7 prio_10_9
+cores=10
+#for fname in prio_10_0 prio_10_3 prio_10_5 prio_10_7 prio_10_9
+for fname in prio_10_7
 do
-    for i in 30 50
+    for i in 85
     do
-        echo "python main.py -i inputs/$fname --interval=1 2 --limit=$i >> results/policy_${fname}_${i}"
-        python main.py -i inputs/$fname --interval=1 2 --limit=$i --cores=8 >> results/policy_${fname}_${i}_8 &
+        echo "python main.py -i inputs/$fname --interval=1 2 --limit=$i --cores=$cores >> results/policy_${fname}_${i}_test"
+        python main.py -i inputs/$fname --interval=1 2 --limit=$i --cores=$cores >> results/policy_${fname}_${i}_test &
         pypid=$!
         echo $pypid
         sleep 400
