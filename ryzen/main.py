@@ -29,7 +29,7 @@ from schema import Schema, And, Or, Use, SchemaError
 from topology import cpu_tree
 # from msr import writemsr, readmsr, get_percore_msr
 from tracker import PerCoreTracker
-from frequency import *
+from frequency import keep_limit_priority, read_freq_real, set_gov_userspace, set_to_max_freq, setup_rapl
 from launcher import run_on_multiple_cores_forever, launch_on_core, wait_for_procs
 from helper import EnergyTracker
 from shares import get_list_limits, get_lists
