@@ -40,10 +40,10 @@ def power_shares_loop(limit, _proc, max_per_core, cores):
     limit_per_core = None
 
     # allocate
-    if limit > len(_proc)*max_per_core:
+    if limit > min(len(_proc),cores)*max_per_core:
         # Have more power than needs allocation
-        limit_per_core = [max_per_core]*len(_proc)
-        left_over_pwr = left_over_pwr - len(_proc)*max_per_core
+        limit_per_core = [max_per_core]*min(len(_proc), cores)
+        left_over_pwr = left_over_pwr - min(len(_proc), cores)*max_per_core
         return left_over_pwr, limit_per_core, shares_app
 
     # Allocate and check
@@ -104,19 +104,19 @@ def first_allocation(power, cores, app_file):
     high_set = None
     low_set = None
 
-    if len(high) == 0:
+    if high is None:
         # we got no High Powe applications
         high_set = None
         extra_pwr = limit
     else:
         extra_pwr, hi_limits, shares_high = power_shares_loop(limit, high, max_per_core, cores)
-        print("Pwer left = ", extra_pwr)
+        print("Power left = ", extra_pwr)
         high_set = (hi_limits, shares_high, high)
 
-    if int(round(extra_pwr, 0)) > 0:
+    cores_avil = cores if high is None else cores-len(high)
+    if int(round(extra_pwr, 0)) > 0 and not(low is None) and cores_avil > 0:
         # We have power for low priority
-        # First check if we have cores avialable
-        cores_avil = cores-len(high)
+        # First check if we have cores avialable    
         extra_pwr, lo_limits, shares_lo = power_shares_loop(extra_pwr, low, max_per_core, cores_avil)
         low_set = (lo_limits, shares_lo, low)
 
@@ -135,10 +135,35 @@ def get_list_limits(power, cores, app_file):
     if not low_set is None:
         #We have low_prio apps
         all_limits += low_set[0]
-        all_apps += low_set[2]        # Nothing to Run
-        # set cores to idle
+        all_apps += low_set[2]
 
     return all_apps, all_limits
+
+def get_list_limits_cores(power, cores, app_file):
+    extra_power, high_set, low_set = first_allocation(power, cores, app_file)
+    all_limits = None
+    high_apps = None
+    low_apps = None
+    high_cores = None
+    low_cores = None
+    start = 0
+    end = 0
+
+    if not high_set is None:
+        #We have high_prio apps
+        all_limits = high_set[0]
+        high_apps = high_set[2]
+        high_cores = [i*2 for i in range(start, len(all_limits))]
+        start = len(all_limits)
+        end = 1
+
+    if not low_set is None:
+        #We have low_prio apps
+        all_limits += low_set[0]
+        low_apps = low_set[2]
+        low_cores = [i*2 for i in range(start, start+min(len(low_set[0]), cores)+end)]
+
+    return high_apps, high_cores, low_apps, low_cores, all_limits
 
 
 def test():

@@ -188,12 +188,12 @@ def change_freq_std(target_pwr, current_pwr, old_freq=None, cpu=0, increase=Fals
     step = 100000
 
     # Select the right step size
-    if power_diff < 500:
+    if power_diff < 300:
         # to close better settle than oscillate
         return None
-    elif power_diff > 3000 and power_diff < 10000:
-        step = 100000
-    elif power_diff > 10000:
+    elif power_diff > 3000 and power_diff < 7000:
+        step = 200000
+    elif power_diff > 7000:
         step = 500000
 
     if increase:
@@ -210,7 +210,8 @@ def change_freq_std(target_pwr, current_pwr, old_freq=None, cpu=0, increase=Fals
 
     print("ch_freq_std ", cpu, target_pwr, new_freq, increase, power_diff)
     # WARN: Hardecoded cpu numbers below
-    write_freq(new_freq, cpu)
+    #write_freq(new_freq, cpu)
+    update_write_freq(new_freq, cpu)
     if (cpu % 2) == 0:
         update_write_freq(new_freq, cpu+1)
     else:
@@ -224,18 +225,19 @@ def keep_limit(curr_power, limit=10000, cpu=0, last_freq=None, first_limit=True)
     old_freq = None
 
     if not first_limit:
-        if curr_power - limit > 0 and new_limit > 1000:
-            new_limit = new_limit - abs(curr_power - new_limit)/2
-            #new_limit = new_limit - 1000
-        elif curr_power - limit < 0 and new_limit > 1000:
-            new_limit = new_limit + abs(curr_power - new_limit)/4
+#        if curr_power - limit > 0 and new_limit > 1000:
+#            new_limit = new_limit - abs(curr_power - new_limit)/2
+#            #new_limit = new_limit - 1000
+#        elif curr_power - limit < 0 and new_limit > 1000:
+#            new_limit = new_limit + abs(curr_power - new_limit)/4
 #            #new_limit = new_limit + 1000
-
-    # print("In keep_limit ", limit)
-        if curr_power > limit:
+#
+#    # print("In keep_limit ", limit)
+        tolerance = 100
+        if curr_power - limit > tolerance:
             # reduce frequency
             old_freq = change_freq_std(new_limit, curr_power, last_freq, cpu)
-        elif curr_power < limit:
+        elif curr_power - limit < -1*tolerance:
             # print("Increase")
             old_freq = change_freq_std(new_limit, curr_power, last_freq, cpu, increase=True)
     else:
@@ -247,4 +249,3 @@ def keep_limit(curr_power, limit=10000, cpu=0, last_freq=None, first_limit=True)
             # print("Increase")
             change_freq(new_limit, cpu, increase=True)
     return old_freq
-

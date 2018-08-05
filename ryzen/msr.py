@@ -107,4 +107,4 @@ def print_pstate_values():
     """ Debug function to read pstate configs"""
     for i in range(3):
         pstate_val = readmsr(PSTATES[i], cpu=0)
-        pstate2str(pstate_val)
+        print(pstate2str(pstate_val))

@@ -3,7 +3,7 @@
 by Akhil Guliani
 
 Usage:
-    main.py [-i FILE] [--interval=<seconds>] PID...
+    main.py [-i FILE] [--interval=<seconds>] [--limit=<watts>] [--cores=<num>] PID...
 
 Arguments:
     PID     pids to track
@@ -12,6 +12,8 @@ Options:
     -h
     -i FILE --input=FILE    file with pids to monitor and their control params
     --interval=<seconds>   max amount of time in minutes to keep the daemon alive
+    --limit=<watts>   combined core power limit
+    --cores=<num>  number of active cores
 """
 
 import os
@@ -26,11 +28,11 @@ from schema import Schema, And, Or, Use, SchemaError
 from topology import cpu_tree
 from msr import AMD_MSR_CORE_ENERGY, writemsr, readmsr, get_percore_msr, get_percore_energy, get_units, setup_perf, get_package_energy
 from tracker import PerCoreTracker, update_delta, update_delta_32, update_pkg
-from frequency import *
-from launcher import *
+from frequency import keep_limit, read_freq_real, set_gov_userspace, set_to_max_freq
+from launcher import run_on_multiple_cores_forever, launch_on_core, wait_for_procs
 from operator import itemgetter
 from multiprocessing import Process
-from shares import get_list_limits
+from shares import get_list_limits, get_list_limits_cores
 
 def signal_handler(_signal, _frame):
     """ Handle SIGINT"""
@@ -127,33 +129,58 @@ def main(arg1, energy_unit, tree):
     track_energy = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
     track_perf = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
     power_tracker = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
+    package_tracker = 0
 
     sum_freq = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
     sum_perf = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
     sum_power = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
+    sum_package = 0
 
     first = True
     old_freq = [None] * len(cpus)
     count = 0
     proc_file = arg1['--input']
-    power_limit = 25
-    cores = 4
+    power_limit = int(arg1['--limit'])
+    cores = int(arg1['--cores'])
     max_per_core = 10000
-    proc_list, limits = get_list_limits(power_limit, cores, proc_file)
-
-    if limits is None:
-        limits = [max_per_core]*cores
-    else:
-        cores = len(limits)
+    #proc_list, limits = get_list_limits(power_limit, cores, proc_file)
     
-    wait_thread = Process(target = run_on_multiple_cores_forever, args=(proc_list, None))
+    # if limits is None:
+    #     limits = [max_per_core]*cores
+    # else:
+    #     cores = len(limits)
+
+    
+    
+    high_list, high_cores, low_list, low_cores, limits = get_list_limits_cores(power_limit, cores, proc_file)
+    #wait_thread = Process(target = run_on_multiple_cores_forever, args=(proc_list, cpus))
+    wait_high_threads = Process(target=run_on_multiple_cores_forever, args=(high_list, high_cores))
+    wait_low_threads = Process(target=run_on_multiple_cores_forever, args=(low_list, low_cores))
+    
+    if low_list is None:
+        print("Low", "None", "None")
+    else:
+        print("Low", len(low_list), low_cores)
+    
+    if high_list is None:
+        print("High", "None", "None")
+    else:
+        print("High", len(high_list), high_cores)
+    
+
+    print("Limits", limits)
 
     # change = PerCoreTracker()
 #    limits = [5000, 8000, 6000, 10000]
 #    wait_thread = Process(target=launch_all, args=(high,))
 
 #    wait_thread = Process(target=launch_all_with_post_fn, args=(high, exit_when_done))
-    wait_thread.start()
+    wait_high_threads.start()
+
+    power_diff = 0
+
+    control_start = 0
+    first_control = True
 
     while True:
         pwr_before = PerCoreTracker(dict(zip(cpus, get_percore_energy(cpus))))
@@ -165,7 +192,7 @@ def main(arg1, energy_unit, tree):
         perf_after = PerCoreTracker(dict(zip(cpus, get_percore_msr(perf_msr, cpus))))
         package_after = get_package_energy()
 
-        power_delta = update_delta_32(pwr_before, pwr_after)
+        power_delta = update_delta(pwr_before, pwr_after)
         track_energy = track_energy + power_delta.scalar_mul(energy_unit)
         power_delta.scalar_mul(1000)
 
@@ -175,37 +202,52 @@ def main(arg1, energy_unit, tree):
         ## Percent change
         if first:
             power_tracker = power_delta
+            package_tracker = package_pwr
             track_perf = perf_delta
         else:
             # change = (abs(power_delta - power_tracker) / power_tracker).scalar_mul(100)
+            package_tracker = package_tracker*0.7 + package_pwr*0.3
             power_tracker = (power_tracker).scalar_mul(0.7) + (power_delta).scalar_mul(0.3)
             track_perf = track_perf.scalar_mul(0.7) + perf_delta.scalar_mul(0.3)
-
-        for i in range(cores):
-            # if change == {} or (change[cpus[i]] < 1 and delta[cpus[i]] < limits[i]):
-            #     continue
-            # if i == 0:
-            #     continue
-            old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first)
-        count = count + 1
         
+        if count < 10:
+            pass
+        elif count > 10 and count < 20 :
+            for i in range(len(high_cores)):
+                old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_control)
+                first_control = False
+        elif count > 20:
+            # check if we have enough power for low priority
+            if power_limit - sum((power_tracker[i*2] for i in range(cores)))/count < -1*4000:
+                # we have excess power at a steady enogh state for Low Priority
+                wait_low_threads.start()
+                control_start = len(high_cores)
+                 
+            for i in range(len(limits)):
+                old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], False)
+                first = False
+        count = count + 1
+
         f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
         sum_perf = sum_perf + perf_delta
         sum_freq = sum_freq + f_dict
         sum_power = sum_power + power_tracker
+        sum_package = sum_package + package_pwr
 
         print(round(sum_power.scalar_div(count), 0))
         print(round(sum_freq.scalar_div(count), 0))
         print(round(sum_perf.scalar_div(count), 0))
-        print(count, (power_limit*1000) - round(sum((sum_power[i*2] for i in range(cores)))/count, 2), package_pwr, sep=", ")
+
+        avg_pwr = round(sum((sum_power[i*2] for i in range(cores)))/count, 2)
+        power_diff += (power_limit*1000) - avg_pwr
+
+        print(count, int(power_diff/count), int(sum_package/count), avg_pwr, package_tracker,sep=", ")
 
         print("---------------")
         # print(round(power_tracker, 3))
         # print(f_dict)
         # print(round(perf_delta, 3), "\n________")
-
-        first = False
-        plot_all(f_dict, power_tracker, track_perf, count, cpus[:len(limits)], limits)
+        # plot_all(f_dict, power_tracker, track_perf, count, cpus[:len(limits)], limits)
 
 ## Starting point
 if __name__ == "__main__":
@@ -218,6 +260,10 @@ if __name__ == "__main__":
             error='input FILE should be readable'))),
         '--interval': Or(None, And(Use(int), lambda n: 0 < n < 1000),
             error='--interval=N should be integer 0 < N < 1000'),
+        '--limit': Or(None, And(Use(int), lambda n: 0 < n < 95),
+            error='--limit=N should be integer 0 < N < 95'),
+        '--cores': Or(None, And(Use(int), lambda n: 2 < n < 9),
+            error='--cores=N should be integer 3 <= N <= 8'),
         'PID': [Or(None, And(Use(int), lambda n: 1 < n < 32768),
             error='PID should be inteager within 1 < N < 32768')],
         })

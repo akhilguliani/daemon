@@ -72,7 +72,7 @@ class PerCoreTracker(dict):
                 ret = rv[key] or ret
         return ret, rv
 
-    def __int__(self, ndigits):
+    def __int__(self):
         for key, value in self.items():
             self[key] = int(value)
         return self
