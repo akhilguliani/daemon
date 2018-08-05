@@ -2,6 +2,11 @@
 __pycache__/
 *.py[cod]
 *$py.class
+inputs/*
+results/*
+*.out
+rapl_*
+input2
 
 # C extensions
 *.so
