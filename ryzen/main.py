@@ -181,7 +181,7 @@ def main(arg1, energy_unit, tree):
 
     control_start = 0
     first_control = True
-
+    lp_active = False
     while True:
         pwr_before = PerCoreTracker(dict(zip(cpus, get_percore_energy(cpus))))
         perf_before = PerCoreTracker(dict(zip(cpus, get_percore_msr(perf_msr, cpus))))
@@ -210,44 +210,61 @@ def main(arg1, energy_unit, tree):
             power_tracker = (power_tracker).scalar_mul(0.7) + (power_delta).scalar_mul(0.3)
             track_perf = track_perf.scalar_mul(0.7) + perf_delta.scalar_mul(0.3)
         
+        count = count + 1
+        
         if count < 10:
             pass
         elif count > 10 and count < 20 :
             for i in range(len(high_cores)):
-                old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_control)
-                first_control = False
+                if i == 0:
+                    old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_limit=first_control, leader=True)
+                else:
+                    #old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], False)
+                    old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_limit=first_control)
+            first_control = False
+            base = count
         elif count > 20:
             # check if we have enough power for low priority
             if power_limit - sum((power_tracker[i*2] for i in range(cores)))/count < -1*4000:
                 # we have excess power at a steady enogh state for Low Priority
                 wait_low_threads.start()
                 control_start = len(high_cores)
+                lp_active = True
                  
             for i in range(len(limits)):
-                old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], False)
+                if lp_active:
+                    leader_conditon = (i == 0 or i == len(high_cores))
+                else:
+                    leader_conditon = (i == 0 or i == 4)
+
+                #print(leader_conditon)
+                if leader_conditon:
+                    old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_limit=False, leader=True)
+                else:
+                    old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], False)
                 first = False
-        count = count + 1
+        
 
-        f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
-        sum_perf = sum_perf + perf_delta
-        sum_freq = sum_freq + f_dict
-        sum_power = sum_power + power_tracker
-        sum_package = sum_package + package_pwr
+            f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
+            sum_perf = sum_perf + perf_delta
+            sum_freq = sum_freq + f_dict
+            sum_power = sum_power + power_tracker
+            sum_package = sum_package + package_pwr
 
-        print(round(sum_power.scalar_div(count), 0))
-        print(round(sum_freq.scalar_div(count), 0))
-        print(round(sum_perf.scalar_div(count), 0))
+            print(round(sum_power.scalar_div(count-base), 0))
+            print(round(sum_freq.scalar_div(count-base), 0))
+            print(round(sum_perf.scalar_div(count-base), 0))
 
-        avg_pwr = round(sum((sum_power[i*2] for i in range(cores)))/count, 2)
-        power_diff += (power_limit*1000) - avg_pwr
+            avg_pwr = round(sum((sum_power[i*2] for i in range(cores)))/(count-base), 2)
+            power_diff += (power_limit*1000) - avg_pwr
 
-        print(count, int(power_diff/count), int(sum_package/count), avg_pwr, package_tracker,sep=", ")
+            print(count, int(power_diff/(count-base)), int(sum_package/(count-base)), avg_pwr, package_tracker,sep=", ")
 
-        print("---------------")
-        # print(round(power_tracker, 3))
-        # print(f_dict)
-        # print(round(perf_delta, 3), "\n________")
-        # plot_all(f_dict, power_tracker, track_perf, count, cpus[:len(limits)], limits)
+            print("---------------")
+            # print(round(power_tracker, 3))
+            # print(f_dict)
+            # print(round(perf_delta, 3), "\n________")
+            # plot_all(f_dict, power_tracker, track_perf, count, cpus[:len(limits)], limits)
 
 ## Starting point
 if __name__ == "__main__":

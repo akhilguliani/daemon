@@ -109,6 +109,7 @@ def first_allocation(power, cores, app_file):
         high_set = None
         extra_pwr = limit
     else:
+        high.sort(key=itemgetter(2))
         extra_pwr, hi_limits, shares_high = power_shares_loop(limit, high, max_per_core, cores)
         print("Power left = ", extra_pwr)
         high_set = (hi_limits, shares_high, high)
@@ -116,7 +117,8 @@ def first_allocation(power, cores, app_file):
     cores_avil = cores if high is None else cores-len(high)
     if int(round(extra_pwr, 0)) > 0 and not(low is None) and cores_avil > 0:
         # We have power for low priority
-        # First check if we have cores avialable    
+        # First check if we have cores avialable 
+        low.sort(key=itemgetter(2))   
         extra_pwr, lo_limits, shares_lo = power_shares_loop(extra_pwr, low, max_per_core, cores_avil)
         low_set = (lo_limits, shares_lo, low)
 

@@ -62,7 +62,7 @@ def write_freq(val, cpu=0):
         freq_file.close()
     return
 
-def update_write_freq(val, cpu=0, turbo=False):
+def update_write_freq(val, cpu=0, turbo=False, update=True):
     """ AMD Ryzen Specific write frequency loop
         Here we update the relevant P-State to match the val given
         the h/w can override us
@@ -75,14 +75,17 @@ def update_write_freq(val, cpu=0, turbo=False):
     #    write_freq(val, cpu)
     if val > states[0] and val < states[-1]:
         # Update state 1 to mean val
-        update_pstate_freq(val, 1)
+        if update:
+            update_pstate_freq(val, 1)
         write_freq(states[1], cpu)
-    elif val <= states[0] and val >= 800000:
-        update_pstate_freq(val, 2)
+    elif val <= states[0] and val > 400000:
+        if update:
+            update_pstate_freq(val, 2)
         write_freq(states[0], cpu)
     elif val >= states[-1] and val <= max_freq:
         # Overclocking
-        update_pstate_freq(val, 0)
+        if update:
+            update_pstate_freq(val, 0)
         write_freq(states[-1], cpu)
     return
 
@@ -127,12 +130,14 @@ def power_at_freq(in_freq):
         freq = 8
     elif in_freq > bounds[1]:
         freq = 34
-    return (0.0211*(freq**2) - 0.4697*freq + 7.7535)*1000
+    #return (0.0211*(freq**2) - 0.4697*freq + 7.7535)*1000
+    return round((0.231)*freq - 0.85, 4)*1000
 
 def freq_at_power(power):
-    return int(-0.0773*((power/1000)**2)+ 3.7436*(power/1000) - 4.6404)*100000
+    #return int(-0.0773*((power/1000)**2)+ 3.7436*(power/1000) - 4.6404)*100000 
+    return int(round(((power/1000)+0.85)*13/3,0))*100000
 
-def change_freq(target_power, cpu=0, increase=False):
+def change_freq(target_power, cpu=0, increase=False, Update=True):
     """ Update frequency based on target power and power model """
     # power differential to freq reduction factor
     new_freq = freq_at_power(target_power)
@@ -161,16 +166,25 @@ def change_freq(target_power, cpu=0, increase=False):
             if new_power == old_power:
                 new_freq = new_freq + 100000
                 break
+    # if new_freq < bounds[0]:
+    #     new_freq = bounds[0]
+    print("change_freq:", new_freq, old_freq, new_power, target_power)
+
+    if new_freq < 400000:
+        new_freq = 400000
+    if new_freq > 3400000:
+        new_freq = 3400000
 
     print("change_freq:", new_freq, old_freq, new_power, target_power)
     # WARN: Hardecoded cpu numbers below
     #for i in range(psutil.cpu_count()):
-    update_write_freq(new_freq, cpu)
-    update_write_freq(new_freq, cpu+1)
+    if (cpu % 2) == 0:
+        update_write_freq(new_freq, cpu+1, update=Update)
+    else:
+        update_write_freq(new_freq, cpu-1, update=Update)
+    return new_freq
 
-    return
-
-def change_freq_std(target_pwr, current_pwr, old_freq=None, cpu=0, increase=False):
+def change_freq_std(target_pwr, current_pwr, old_freq=None, cpu=0, increase=False, Update=True):
     """ Update frequency based on target power and actulal power value """
     # TODO: Fix this function - try to determine when to stop
     # probably better to make this a class and track some of the variables and
@@ -203,23 +217,25 @@ def change_freq_std(target_pwr, current_pwr, old_freq=None, cpu=0, increase=Fals
 
     bounds = get_freq_bounds_ryzen()
 
-    if new_freq < bounds[0]:
-        new_freq = bounds[0]
+    # if new_freq < bounds[0]:
+    #     new_freq = bounds[0]
+    if new_freq < 400000:
+        new_freq = 400000
     if new_freq > bounds[1]:
         new_freq = bounds[1]
 
-    print("ch_freq_std ", cpu, target_pwr, new_freq, increase, power_diff)
+    print("ch_freq_std ", cpu, target_pwr, new_freq, increase, power_diff, Update)
     # WARN: Hardecoded cpu numbers below
     #write_freq(new_freq, cpu)
-    update_write_freq(new_freq, cpu)
+    update_write_freq(new_freq, cpu, update=Update)
     if (cpu % 2) == 0:
-        update_write_freq(new_freq, cpu+1)
+        update_write_freq(new_freq, cpu+1, update=Update)
     else:
-        update_write_freq(new_freq, cpu-1)
+        update_write_freq(new_freq, cpu-1, update=Update)
 
     return new_freq
 
-def keep_limit(curr_power, limit=10000, cpu=0, last_freq=None, first_limit=True):
+def keep_limit(curr_power, limit, cpu=0, last_freq=None, first_limit=True, leader=False):
     """ Follow the power limit """
     new_limit = limit
     old_freq = None
@@ -236,16 +252,16 @@ def keep_limit(curr_power, limit=10000, cpu=0, last_freq=None, first_limit=True)
         tolerance = 100
         if curr_power - limit > tolerance:
             # reduce frequency
-            old_freq = change_freq_std(new_limit, curr_power, last_freq, cpu)
+            old_freq = change_freq_std(new_limit, curr_power, last_freq, cpu, Update=leader)
         elif curr_power - limit < -1*tolerance:
             # print("Increase")
-            old_freq = change_freq_std(new_limit, curr_power, last_freq, cpu, increase=True)
+            old_freq = change_freq_std(new_limit, curr_power, last_freq, cpu, increase=True, Update=leader)
     else:
         # First Step
         if curr_power > limit:
             # reduce frequency
-            change_freq(new_limit, cpu)
+            old_freq = change_freq(new_limit, cpu, Update=leader)
         elif curr_power < limit:
             # print("Increase")
-            change_freq(new_limit, cpu, increase=True)
+            old_freq = change_freq(new_limit, cpu, increase=True, Update=leader)
     return old_freq
