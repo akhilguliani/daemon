@@ -154,8 +154,8 @@ def main(arg1, perf_file, tree):
     cores = int(arg1['--cores'])
     use_rapl = eval(arg1['--rapl']) 
     print(use_rapl)
-    max_per_core = 10000
-    #proc_list, limits = get_list_limits(power_limit, cores, proc_file)
+    # max_per_core = 10000
+    # proc_list, limits = get_list_limits(power_limit, cores, proc_file)
 
     high_list, high_cores, low_list, low_cores = get_lists(power_limit, cores, proc_file)
     
