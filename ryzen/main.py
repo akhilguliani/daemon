@@ -3,7 +3,7 @@
 by Akhil Guliani
 
 Usage:
-    main.py [-i FILE] [--interval=<seconds>] [--limit=<watts>] [--cores=<num>] PID...
+    main.py [-i FILE] [--interval=<seconds>] [--limit=<watts>] [--cores=<num>] [-r BOOL] PID...
 
 Arguments:
     PID     pids to track
@@ -14,6 +14,7 @@ Options:
     --interval=<seconds>   max amount of time in minutes to keep the daemon alive
     --limit=<watts>   RAPL limit
     --cores=<num>   Number of cores
+    -r --rapl=BOOL
 """
 
 import os
@@ -29,7 +30,7 @@ from schema import Schema, And, Or, Use, SchemaError
 from topology import cpu_tree
 # from msr import writemsr, readmsr, get_percore_msr
 from tracker import PerCoreTracker
-from frequency import keep_limit_priority, read_freq_real, set_gov_userspace, set_to_max_freq, setup_rapl
+from frequency import keep_limit_priority, read_freq_real, set_gov_userspace, set_to_max_freq, setup_rapl, set_rapl_limit
 from launcher import run_on_multiple_cores_forever, launch_on_core, wait_for_procs
 from helper import EnergyTracker
 from shares import get_list_limits, get_lists
@@ -148,15 +149,26 @@ def main(arg1, perf_file, tree):
     old_freq = [None] * len(cpus)
     count = 0
     proc_file = arg1['--input']
-    power_limit = int(arg1['--limit'])*1000
+    rapl_limit = int(arg1['--limit'])
+    power_limit = rapl_limit*1000
     cores = int(arg1['--cores'])
+    use_rapl = eval(arg1['--rapl']) 
+    print(use_rapl)
     max_per_core = 10000
     #proc_list, limits = get_list_limits(power_limit, cores, proc_file)
 
     high_list, high_cores, low_list, low_cores = get_lists(power_limit, cores, proc_file)
+    
+    if low_list is None:
+        print("Low", "None", "None")
+    else:
+        print("Low", len(low_list), low_cores)
+    
+    if high_list is None:
+        print("High", "None", "None")
+    else:
+        print("High", len(high_list), high_cores)
 
-    print("High", len(high_list), high_cores)
-    print("Low", len(low_list), low_cores)
     # if limits is None:
     #     limits = [max_per_core]*cores
     # else:
@@ -192,13 +204,18 @@ def main(arg1, perf_file, tree):
 
         # for i in range(cores):
         #     pass
-        if count == 5:
-            ## High Prio Apps Ramped up
-            run_lp = keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=True, lp_active=run_lp)
-            if run_lp:
-                wait_low_threads.start()
-        elif count > 5:
-            keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=False, lp_active=run_lp)
+        if use_rapl and first:
+            wait_low_threads.start()
+            set_rapl_limit(rapl_limit)
+        elif not use_rapl:
+            # print("Our control Loop")
+            if count == 5:
+                ## High Prio Apps Ramped up
+                run_lp = keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=True, lp_active=run_lp)
+                if run_lp:
+                    wait_low_threads.start()
+            elif count > 5:
+                keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=False, lp_active=run_lp)
         count = count + 1
 
         f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
@@ -234,6 +251,8 @@ if __name__ == "__main__":
                       error='--limit=N should be integer 30 < limit < 85'),
         '--cores': Or(None, And(Use(int), lambda n: 0 < n < 11),
                       error='--cores=N should be integer 0 < num < 11'),
+        '--rapl': Or(None, And(Use(eval), lambda n: n or True),
+                      error='--rapl=True|False'),
         'PID': [Or(None, And(Use(int), lambda n: 1 < n < 32768),
                    error='PID should be inteager within 1 < N < 32768')],
         })
@@ -250,4 +269,5 @@ if __name__ == "__main__":
     set_gov_userspace()
     set_to_max_freq()
     setup_rapl()
+    set_rapl_limit(85)
     main(ARGUMENTS, perf_file, tree)

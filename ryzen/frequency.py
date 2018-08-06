@@ -298,14 +298,14 @@ def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limi
             # We have excess power
             # First Check if high power apps are at max freq
             update_lp = False
-            print("Below limit updating")
+            # print("Below limit updating")
             first_core = 0 if high_cpus == [] else high_cpus[0]
             curr_freq = int(read_freq(cpu=first_core))
             for core in high_cpus:
                 if curr_freq < bounds[1]:
                     write_freq(curr_freq + step, cpu=core)
                     write_freq(curr_freq + step, cpu=20+core)
-                elif curr_freq >= 2200000 :
+                elif curr_freq >= 2300000 :
                     update_lp = update_lp and True
                     # we can increase power for low priority tasks
             if update_lp and lp_active:
