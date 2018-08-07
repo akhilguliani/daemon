@@ -262,9 +262,10 @@ def keep_limit_proportional():
 
 def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limit=True, lp_active=False):
     """ Follow the power limit for Intel skylake priority only"""
-    tolerance = 500
+    tolerance = 200
     step = 100000
     bounds = get_freq_bounds()
+    # update_lp = False
 
     if first_limit:
         # Check if we are above limt
@@ -278,6 +279,7 @@ def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limi
             for core in low_cpus:
                 write_freq(800000, cpu=core)
                 write_freq(800000, cpu=20+core)
+            update_lp = True
             return True
         elif (curr_power - limit) > tolerance:
             # Above limit
@@ -293,22 +295,24 @@ def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limi
         if abs(curr_power - limit) < tolerance:
             # at power limit
             return False
-        elif (curr_power - limit) < -1*tolerance:
+        elif (limit - curr_power) > -1*tolerance:
             # Below limit
             # We have excess power
             # First Check if high power apps are at max freq
-            update_lp = False
-            # print("Below limit updating")
+            
+            
             first_core = 0 if high_cpus == [] else high_cpus[0]
             curr_freq = int(read_freq(cpu=first_core))
             for core in high_cpus:
                 if curr_freq < bounds[1]:
                     write_freq(curr_freq + step, cpu=core)
                     write_freq(curr_freq + step, cpu=20+core)
-                elif curr_freq >= 2300000 :
-                    update_lp = update_lp and True
+                # elif curr_freq >= 2100000 :
+                #     update_lp = True
+                #     print(update_lp)
                     # we can increase power for low priority tasks
-            if update_lp and lp_active:
+            print("Below limit updating", lp_active, curr_freq)
+            if curr_freq >= 2100000 and lp_active:
                 for core in low_cpus:
                     curr_freq = int(read_freq(cpu=core))
                     if curr_freq < bounds[1]:
@@ -319,6 +323,13 @@ def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limi
         elif (curr_power - limit) > tolerance:
             # Above limit
             # We have no excess power
+            if lp_active:
+                for core in low_cpus:
+                    curr_freq = int(read_freq(cpu=core))
+                    if curr_freq < bounds[1]:
+                        write_freq(curr_freq - step, cpu=core)
+                        write_freq(curr_freq - step, cpu=20+core)
+                return True
             # Reduce freq for high priority cores by one step
             first_core = 0 if high_cpus == [] else high_cpus[0]
             curr_freq = int(read_freq(cpu=first_core))

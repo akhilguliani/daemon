@@ -144,6 +144,7 @@ def main(arg1, perf_file, tree):
     sum_freq = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
     sum_perf = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
     sum_power = 0
+    sum_diff = 0
 
     first = True
     old_freq = [None] * len(cpus)
@@ -199,9 +200,10 @@ def main(arg1, perf_file, tree):
             track_perf = perf_delta
         else:
             # change = (abs(power_delta - power_tracker) / power_tracker).scalar_mul(100)
-            power_tracker = (power_tracker)*(0.3) + (package_pwr)*(0.7)
+            power_tracker = (power_tracker)*(0.7) + (package_pwr)*(0.3)
             track_perf = track_perf.scalar_mul(0.7) + perf_delta.scalar_mul(0.3)
 
+        count = count + 1
         # for i in range(cores):
         #     pass
         if use_rapl and first:
@@ -209,24 +211,26 @@ def main(arg1, perf_file, tree):
             set_rapl_limit(rapl_limit)
         elif not use_rapl:
             # print("Our control Loop")
-            if count == 5:
+            if count == 10:
                 ## High Prio Apps Ramped up
                 run_lp = keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=True, lp_active=run_lp)
+                print("RUNNING LOW PRIO", run_lp)
                 if run_lp:
                     wait_low_threads.start()
-            elif count > 5:
+                base = count
+            elif count > 10:
                 keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=False, lp_active=run_lp)
-        count = count + 1
 
-        f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
-        sum_perf = sum_perf + perf_delta
-        sum_freq = sum_freq + f_dict
-        sum_power = sum_power + power_tracker
+                f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
+                sum_perf = sum_perf + track_perf
+                sum_freq = sum_freq + f_dict
+                sum_power = sum_power + power_tracker
+                sum_diff = sum_diff + (power_limit - power_tracker)
 
-        print(round(sum_power/(count), 0))
-        print(round(sum_freq.scalar_div(count), 0))
-        print(round(sum_perf.scalar_div(count), 0))
-        print(count, (power_limit) - round(sum_power/count, 2), power_tracker, sep=", ")
+                print(round(sum_power/(count-base), 0))
+                print(round(sum_freq.scalar_div(count-base), 0))
+                print(round(sum_perf.scalar_div(count-base), 0))
+                print(count, (power_limit - round(sum_power/count-base, 2)), sum_diff/(count-base), power_tracker, sep=", ")
 
         print("---------------")
         # print(round(power_tracker, 3))
