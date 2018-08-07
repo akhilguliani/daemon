@@ -220,8 +220,8 @@ def change_freq_std(target_pwr, current_pwr, old_freq=None, cpu=0, increase=Fals
 
     # if new_freq < bounds[0]:
     #     new_freq = bounds[0]
-    if new_freq < 400000:
-        new_freq = 400000
+    if new_freq < 800000:
+        new_freq = 800000
     if new_freq > bounds[1]:
         new_freq = bounds[1]
 

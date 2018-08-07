@@ -242,7 +242,7 @@ def main(arg1, energy_unit, tree):
             
             if count % 40 == 0:
                 # Unused Power redistribution hack (ony for proporional share) comment out for priority runs
-                if power_limit*1000 - current_power  > 1500:
+                if power_limit*1000 - current_power  > 2000:
                     # print("Have excess_Power")
                     # we have more than two watss to distribute
                     # we increase limts for all (will have no effect on programs already at highest p_state)
