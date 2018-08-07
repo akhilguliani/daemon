@@ -170,6 +170,7 @@ def main(arg1, energy_unit, tree):
 
     print("Limits", limits)
 
+    print("Power Limit", power_limit)
     # change = PerCoreTracker()
 #    limits = [5000, 8000, 6000, 10000]
 #    wait_thread = Process(target=launch_all, args=(high,))
@@ -212,9 +213,9 @@ def main(arg1, energy_unit, tree):
         
         count = count + 1
         
-        if count < 10:
+        if count < 5:
             pass
-        elif count > 10 and count < 20 :
+        elif count > 5 and count < 10 :
             for i in range(len(high_cores)):
                 if i == 0:
                     old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_limit=first_control, leader=True)
@@ -223,15 +224,18 @@ def main(arg1, energy_unit, tree):
                     old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_limit=first_control)
             first_control = False
             base = count
-        elif count > 20:
+        elif count > 10:
             # check if we have enough power for low priority
-            if power_limit - sum((power_tracker[i*2] for i in range(cores)))/count < -1*4000:
-                # we have excess power at a steady enogh state for Low Priority
-                wait_low_threads.start()
-                control_start = len(high_cores)
-                lp_active = True
+            current_power   = sum([power_tracker[i*2] for i in range(cores)])
+            if first:
+                print(power_limit*1000 - current_power,( power_limit - current_power  > -1*1000*len(low_cores)) )
+                if power_limit*1000 - current_power  > 1000*len(low_cores):
+                    # we have excess power at a steady enough state for Low Priority
+                    wait_low_threads.start()
+                    control_start = len(high_cores)+len(low_cores)
+                    lp_active = True
                  
-            for i in range(len(limits)):
+            for i in range(control_start):
                 if lp_active:
                     leader_conditon = (i == 0 or i == len(high_cores))
                 else:
@@ -242,7 +246,7 @@ def main(arg1, energy_unit, tree):
                     old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_limit=False, leader=True)
                 else:
                     old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], False)
-                first = False
+            first = False
         
 
             f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
@@ -255,12 +259,12 @@ def main(arg1, energy_unit, tree):
             print(round(sum_freq.scalar_div(count-base), 0))
             print(round(sum_perf.scalar_div(count-base), 0))
 
-            avg_pwr = round(sum((sum_power[i*2] for i in range(cores)))/(count-base), 2)
-            power_diff += (power_limit*1000) - avg_pwr
+            
+            power_diff += (power_limit*1000) - current_power
 
-            print(count, int(power_diff/(count-base)), int(sum_package/(count-base)), avg_pwr, package_tracker,sep=", ")
+            print(count, current_power, int(power_diff/(count-base)), int(sum_package/(count-base)), package_tracker,sep=", ")
 
-            print("---------------")
+            print("\n---------------")
             # print(round(power_tracker, 3))
             # print(f_dict)
             # print(round(perf_delta, 3), "\n________")
