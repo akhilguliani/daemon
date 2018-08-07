@@ -212,7 +212,9 @@ def main(arg1, energy_unit, tree):
             track_perf = track_perf.scalar_mul(0.7) + perf_delta.scalar_mul(0.3)
         
         count = count + 1
-        
+        first = False
+        f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
+
         if count < 5:
             pass
         elif count > 5 and count < 30 :
@@ -237,7 +239,16 @@ def main(arg1, energy_unit, tree):
                     wait_low_threads.start()
                     control_start = len(high_cores)+len(low_cores)
                     lp_active = True
-                 
+            
+            if count % 40 == 0:
+                # Unused Power redistribution hack (ony for proporional share) comment out for priority runs
+                if power_limit*1000 - current_power  > 1500:
+                    # print("Have excess_Power")
+                    # we have more than two watss to distribute
+                    # we increase limts for all (will have no effect on programs already at highest p_state)
+                    excess = abs(power_limit*1000 - current_power)
+                    limits = get_new_limits(shares, 0, excess, limits, cores, freqs=list(f_dict.values()))
+
             for i in range(control_start):
                 if lp_active:
                     leader_conditon = (i == 0 or i == len(high_cores))
@@ -249,10 +260,9 @@ def main(arg1, energy_unit, tree):
                     old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_limit=False, leader=True)
                 else:
                     old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], False)
-            first = False
-        
 
-            f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
+
+            
             sum_perf = sum_perf + perf_delta
             sum_freq = sum_freq + f_dict
             sum_power = sum_power + power_tracker

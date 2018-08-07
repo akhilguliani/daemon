@@ -180,10 +180,28 @@ def get_list_limits_cores(power, cores, app_file):
 
     return high_apps, high_cores, low_apps, low_cores, all_limits, all_shares
 
-def get_new_limits(all_shares, start_index, excess_power, all_limits, cores, alpha=1):
-    print(all_shares)
-    excess_per_core = [all_shares[i]*alpha*excess_power if i >= start_index else 0 for i in range(cores)]
-    new_limits = [all_limits[i] + excess_per_core[i] for i in range(cores) ]  
+def get_new_limits(all_shares, start_index, excess_power, all_limits, cores, alpha=1, freqs=None):
+    print("UPDATE LIMITS:", all_shares)
+    import math
+    excess_per_core = [0 for i in range(cores)]
+    new_limits = all_limits
+    if freqs is None:
+        excess_per_core = [all_shares[i]*alpha*excess_power if i >= start_index else 0 for i in range(cores)]
+        new_limits = [all_limits[i] + excess_per_core[i] for i in range(cores) ]
+    else:
+        # take freq into account
+        excess = excess_power
+        count = 0
+        while not(math.isclose(excess,0,rel_tol=0.05)):
+            excess_per_core = [all_shares[i] if not (math.isclose(freqs[i],3400000,rel_tol=0.05)) else 0 for i in range(cores)]
+            total_shares = sum(excess_per_core)
+            excess_per_core = [(E/total_shares)*alpha*excess for E in excess_per_core]
+            new_limits = [new_limits[i] + excess_per_core[i] for i in range(cores)]
+            excess = excess - sum(excess_per_core)
+            count += 1
+            if count == 100:
+                break
+        
     return new_limits
 
 def test():
