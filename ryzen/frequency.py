@@ -205,7 +205,7 @@ def change_freq_std(target_pwr, current_pwr, old_freq=None, cpu=0, increase=Fals
     # Select the right step size
     if power_diff < 300:
         # to close better settle than oscillate
-        return None
+        return new_freq
     elif power_diff > 3000 and power_diff < 7000:
         step = 200000
     elif power_diff > 7000:
@@ -254,7 +254,7 @@ def keep_limit(curr_power, limit, cpu=0, last_freq=None, first_limit=True, leade
         if curr_power - limit > tolerance:
             # reduce frequency
             old_freq = change_freq_std(new_limit, curr_power, last_freq, cpu, Update=leader)
-        elif curr_power - limit < -1*tolerance:
+        elif limit - curr_power > tolerance:
             # print("Increase")
             old_freq = change_freq_std(new_limit, curr_power, last_freq, cpu, increase=True, Update=leader)
     else:

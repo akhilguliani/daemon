@@ -180,7 +180,7 @@ def main(arg1, energy_unit, tree):
 
     power_diff = 0
 
-    control_start = 0
+    control_start = len(high_cores)
     first_control = True
     lp_active = False
     while True:
@@ -227,7 +227,7 @@ def main(arg1, energy_unit, tree):
         elif count > 10:
             # check if we have enough power for low priority
             current_power   = sum([power_tracker[i*2] for i in range(cores)])
-            if first:
+            if first and not (low_cores is None):
                 print(power_limit*1000 - current_power,( power_limit - current_power  > -1*1000*len(low_cores)) )
                 if power_limit*1000 - current_power  > 1000*len(low_cores):
                     # we have excess power at a steady enough state for Low Priority
@@ -241,7 +241,7 @@ def main(arg1, energy_unit, tree):
                 else:
                     leader_conditon = (i == 0 or i == 4)
 
-                #print(leader_conditon)
+                # print(leader_conditon, lp_active)
                 if leader_conditon:
                     old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_limit=False, leader=True)
                 else:
@@ -265,9 +265,9 @@ def main(arg1, energy_unit, tree):
             print(count, current_power, int(power_diff/(count-base)), int(sum_package/(count-base)), package_tracker,sep=", ")
 
             print("\n---------------")
-            # print(round(power_tracker, 3))
-            # print(f_dict)
-            # print(round(perf_delta, 3), "\n________")
+            print(round(power_tracker, 3))
+            print(f_dict)
+            print(round(perf_delta, 3), "\n________")
             # plot_all(f_dict, power_tracker, track_perf, count, cpus[:len(limits)], limits)
 
 ## Starting point
