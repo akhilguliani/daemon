@@ -1,9 +1,9 @@
-for i in 30 40 50
+for i in  25 35 70
 do
     for fname in iprio80 iprio82 iprio86 iprio84
     do
-          echo "python main.py -i inputs/$fname --interval=1 2 --limit=$i --core=8 >> results/policy_${fname}_${i}"
-          python main.py -i inputs/$fname --interval=1 2 --limit=$i --cores=8 >> final/final_policy_prio_${fname}_${i}_8 &
+          echo "python main.py -i inputs/$fname --interval=1 2 --limit=$i --core=8 >> results/policy_${fname}_${i}_8"
+          python main.py -i inputs/$fname --interval=1 2 --limit=$i --cores=8 >> final/fixed_policy_prio_${fname}_${i}_8 &
           pypid=$!
           echo $pypid
           sleep 300
@@ -13,6 +13,6 @@ do
           killall cactusBSSN_r
           killall perlbench_r
           sleep 5
-        done
     done
 done
+

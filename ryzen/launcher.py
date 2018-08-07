@@ -30,7 +30,7 @@ def parse_file(file_path):
                 local.append(list(shlex.split(line.strip())))
             elif count == 3:
                 # extract shares
-                shares = int(line)
+                shares = int(line.strip())
                 if shares < 0:
                     shares = 0
                 if shares > 100:

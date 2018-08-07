@@ -149,9 +149,11 @@ def get_list_limits(power, cores, app_file):
     return all_apps, all_limits
 
 
+
 def get_list_limits_cores(power, cores, app_file):
     extra_power, high_set, low_set = first_allocation(power, cores, app_file)
     all_limits = None
+    all_shares = None
     high_apps = None
     low_apps = None
     high_cores = None
@@ -164,17 +166,25 @@ def get_list_limits_cores(power, cores, app_file):
         all_limits = high_set[0]
         high_apps = high_set[2]
         high_cores = [i*2 for i in range(start, len(all_limits))]
+        all_shares = high_set[1] # get high shares 
         start = len(all_limits)
-        end = 0
+        end = start
 
     if not low_set is None:
         #We have low_prio apps
         all_limits += low_set[0]
         low_apps = low_set[2]
-        low_cores = [i*2 for i in range(start, start+min(len(low_set[0]), cores)+end)]
+        low_cores = [i*2 for i in range(start, min(start+len(low_set[0]), cores))]
+        if not (low_cores is None):
+            all_shares += [low_set[1][i] for i in range(len(low_cores))] # get high shares
 
-    return high_apps, high_cores, low_apps, low_cores, all_limits
+    return high_apps, high_cores, low_apps, low_cores, all_limits, all_shares
 
+def get_new_limits(all_shares, start_index, excess_power, all_limits, cores, alpha=1):
+    print(all_shares)
+    excess_per_core = [all_shares[i]*alpha*excess_power if i >= start_index else 0 for i in range(cores)]
+    new_limits = [all_limits[i] + excess_per_core[i] for i in range(cores) ]  
+    return new_limits
 
 def test():
     for infile in ["inputs/input3", "inputs/i3070", "./inputs/input10050"]:

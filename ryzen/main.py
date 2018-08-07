@@ -32,7 +32,7 @@ from frequency import keep_limit, read_freq_real, set_gov_userspace, set_to_max_
 from launcher import run_on_multiple_cores_forever, launch_on_core, wait_for_procs
 from operator import itemgetter
 from multiprocessing import Process
-from shares import get_list_limits, get_list_limits_cores
+from shares import get_list_limits, get_list_limits_cores, get_new_limits
 
 def signal_handler(_signal, _frame):
     """ Handle SIGINT"""
@@ -152,7 +152,7 @@ def main(arg1, energy_unit, tree):
 
     
     
-    high_list, high_cores, low_list, low_cores, limits = get_list_limits_cores(power_limit, cores, proc_file)
+    high_list, high_cores, low_list, low_cores, limits, shares = get_list_limits_cores(power_limit, cores, proc_file)
     #wait_thread = Process(target = run_on_multiple_cores_forever, args=(proc_list, cpus))
     wait_high_threads = Process(target=run_on_multiple_cores_forever, args=(high_list, high_cores))
     wait_low_threads = Process(target=run_on_multiple_cores_forever, args=(low_list, low_cores))
@@ -215,7 +215,7 @@ def main(arg1, energy_unit, tree):
         
         if count < 5:
             pass
-        elif count > 5 and count < 10 :
+        elif count > 5 and count < 30 :
             for i in range(len(high_cores)):
                 if i == 0:
                     old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_limit=first_control, leader=True)
@@ -224,13 +224,16 @@ def main(arg1, energy_unit, tree):
                     old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_limit=first_control)
             first_control = False
             base = count
-        elif count > 10:
+        elif count > 30:
             # check if we have enough power for low priority
             current_power   = sum([power_tracker[i*2] for i in range(cores)])
             if first and not (low_cores is None):
-                print(power_limit*1000 - current_power,( power_limit - current_power  > -1*1000*len(low_cores)) )
+                print("RUNNIG LOW", power_limit*1000 - current_power,( power_limit - current_power > 1*1000*len(low_cores)) )
                 if power_limit*1000 - current_power  > 1000*len(low_cores):
                     # we have excess power at a steady enough state for Low Priority
+                    excess = abs(power_limit*1000 - current_power)
+                    limits = get_new_limits(shares, control_start, excess, limits, cores)
+                    print("New Limits", limits)
                     wait_low_threads.start()
                     control_start = len(high_cores)+len(low_cores)
                     lp_active = True
