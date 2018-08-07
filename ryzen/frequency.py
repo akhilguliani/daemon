@@ -34,7 +34,8 @@ def set_gov_userspace():
         print("Unspported Driver: please enable intel/acpi_cpufreq from kerenl cmdline")
 
 def quantize(value):
-    ret = round(value / 100000)
+    import math
+    ret = math.ceil(value / 100000)
     return ret*100000
 
 def read_freq(cpu=0):
