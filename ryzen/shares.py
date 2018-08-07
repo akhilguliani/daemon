@@ -115,11 +115,17 @@ def first_allocation(power, cores, app_file):
         high_set = (hi_limits, shares_high, high)
 
     cores_avil = cores if high is None else cores-len(high)
-    if int(round(extra_pwr, 0)) > 0 and not(low is None) and cores_avil > 0:
+    # if int(round(extra_pwr, 0)) > 0 and not(low is None) and cores_avil > 0:
+    if  not(low is None) and cores_avil > 0:
         # We have power for low priority
-        # First check if we have cores avialable 
-        low.sort(key=itemgetter(2))   
-        extra_pwr, lo_limits, shares_lo = power_shares_loop(extra_pwr, low, max_per_core, cores_avil)
+        # First check if we have cores avialable
+        low.sort(key=itemgetter(2)) 
+        if int(round(extra_pwr, 0)) > 0 :  
+            extra_pwr, lo_limits, shares_lo = power_shares_loop(extra_pwr, low, max_per_core, cores_avil)
+        else:
+            # get case for 1 W per avialable core
+            _,lo_limits, shares_lo = power_shares_loop(1000*cores_avil, low, max_per_core, cores_avil)
+            extra_power = None 
         low_set = (lo_limits, shares_lo, low)
 
     return extra_pwr, high_set, low_set
@@ -136,10 +142,12 @@ def get_list_limits(power, cores, app_file):
 
     if not low_set is None:
         #We have low_prio apps
-        all_limits += low_set[0]
+        if not(extra_power is None):
+            all_limits += low_set[0]
         all_apps += low_set[2]
 
     return all_apps, all_limits
+
 
 def get_list_limits_cores(power, cores, app_file):
     extra_power, high_set, low_set = first_allocation(power, cores, app_file)
@@ -157,7 +165,7 @@ def get_list_limits_cores(power, cores, app_file):
         high_apps = high_set[2]
         high_cores = [i*2 for i in range(start, len(all_limits))]
         start = len(all_limits)
-        end = 1
+        end = 0
 
     if not low_set is None:
         #We have low_prio apps
