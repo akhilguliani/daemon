@@ -84,7 +84,7 @@ def main(arg1):
         ostat = _sys_stats.update_stat(istat)
         # print(ostat['freqs'])
         print(ostat['temps'])
-        keep_limit(curr_power, set_limit, first_limit)
+        # keep_limit(curr_power, set_limit, first_limit)
         print(" ---- \n")
         first_limit = False
         prev_energy = _ea.get_update_energy()

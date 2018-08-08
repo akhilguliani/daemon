@@ -209,6 +209,7 @@ def main(arg1, perf_file, tree):
         if use_rapl and first:
             wait_low_threads.start()
             set_rapl_limit(rapl_limit)
+            base = 10
         elif not use_rapl:
             # print("Our control Loop")
             if count == 10:
@@ -221,16 +222,19 @@ def main(arg1, perf_file, tree):
             elif count > 10:
                 keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=False, lp_active=run_lp)
 
-                f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
-                sum_perf = sum_perf + track_perf
-                sum_freq = sum_freq + f_dict
-                sum_power = sum_power + power_tracker
-                sum_diff = sum_diff + (power_limit - power_tracker)
+        f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
+        
+        if count > base:
+        
+            sum_perf = sum_perf + track_perf
+            sum_freq = sum_freq + f_dict
+            sum_power = sum_power + power_tracker
+            sum_diff = sum_diff + (power_limit - power_tracker)
 
-                print(round(sum_power/(count-base), 0))
-                print(round(sum_freq.scalar_div(count-base), 0))
-                print(round(sum_perf.scalar_div(count-base), 0))
-                print(count, (power_limit - round(sum_power/count-base, 2)), sum_diff/(count-base), power_tracker, sep=", ")
+            print(round(sum_power/(count-base), 0))
+            print(round(sum_freq.scalar_div(count-base), 0))
+            print(round(sum_perf.scalar_div(count-base), 0))
+            print(count, power_limit , sum_diff/(count-base), power_tracker, sep=", ")
 
         print("---------------")
         # print(round(power_tracker, 3))
