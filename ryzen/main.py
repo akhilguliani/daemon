@@ -224,7 +224,7 @@ def main(arg1, perf_file, tree):
 
         f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
         
-        if count > base:
+        if count > 10:
         
             sum_perf = sum_perf + track_perf
             sum_freq = sum_freq + f_dict

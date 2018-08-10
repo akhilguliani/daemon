@@ -2,11 +2,11 @@
 from operator import itemgetter
 from functools import reduce
 from launcher import parse_file
-#from frequency import get_freq_bounds
+from frequency import get_freq_bounds
 
-def get_freq_bounds():
-    """ Dummy for offline testing"""
-    return [800000, 3000000]
+# def get_freq_bounds():
+#     """ Dummy for offline testing"""
+#     return [800000, 3000000]
 
 def calc_share_ratios(list_prio, cores):
     """ Basic Shares calculator"""
