@@ -4,6 +4,7 @@ from functools import reduce
 from launcher import parse_file
 from frequency import get_freq_bounds
 
+TDP = 85000
 # def get_freq_bounds():
 #     """ Dummy for offline testing"""
 #     return [800000, 3000000]
@@ -134,7 +135,7 @@ def first_freq_allocation(power_limit, cores, app_file):
     high = [r for r in list_procs if r[3] < 0]
     low = [r for r in list_procs if r[3] > 0]
 
-    TDP = 85*1000
+    #TDP = 85*1000
     alpha = 1
     if power_limit*1000 < TDP:
         alpha = power_limit*1000/float(TDP)

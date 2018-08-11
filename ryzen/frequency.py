@@ -5,6 +5,8 @@ import time
 import math
 from msr import update_pstate_freq
 
+TDP = 85000
+
 def get_freq_bounds(cpu=0):
     bounds = [0, 0]
     freq_file = open("/sys/devices/system/cpu/cpu%d/cpufreq/scaling_max_freq" % cpu, 'r')
@@ -246,7 +248,13 @@ def keep_limit(curr_power, limit=10000, cpu=0, last_freq=None, first_limit=True)
             change_freq(new_limit, cpu, increase=True)
     return old_freq
 
-def keep_limit_proportional():
+def set_per_core_freq(freq_list, cores, start_at=0):
+    """ Write Quantized Frequency Limits """
+    for i in range(start_at, cores):
+        write_freq(quantize(freq_list[i]), i)
+    return
+
+def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_shares, first_limit=False, lp_active=False):
     ## Write a new controller that takes in shares and power -> affects frequency
     # for Mixed priorities this controller also takes in core priorities with shares
     ### Lower Priority gets throttled to minimum till:
@@ -258,7 +266,32 @@ def keep_limit_proportional():
     ###### We also reduce the shares by the threshold delta (this way all apps get throttled eventually, and proportionally)
     ######## We continue with this trend till the power drops below limit or we reach
     # old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first)
-    pass
+    tolerance = 200
+    bounds = get_freq_bounds()
+    max_per_core = max(hi_freqs)
+    # update_lp = False
+    if abs(curr_power - limit) < tolerance:
+        # at power limit nothing todo
+        return False
+    elif (limit - curr_power) > -1*tolerance:
+        # Below limit
+        # We have excess power
+        alpha = abs(limit-curr_power)/TDP
+        extra_freq = 0
+        ## distribute excess power - frequency among 
+        # First Check if high power apps are at max freq
+        if not first_limit:
+            if extra_freq >= 2100000 and lp_active:
+                return True
+            return False
+    elif (curr_power - limit) > tolerance:
+        # Above limit
+        # We have no excess power
+        if (not first_limit) and lp_active:
+            pass
+        # Reduce freq for high priority cores by one step
+        return False
+    return False
 
 def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limit=True, lp_active=False):
     """ Follow the power limit for Intel skylake priority only"""
@@ -299,17 +332,12 @@ def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limi
             # Below limit
             # We have excess power
             # First Check if high power apps are at max freq
-            
-            
             first_core = 0 if high_cpus == [] else high_cpus[0]
             curr_freq = int(read_freq(cpu=first_core))
             for core in high_cpus:
                 if curr_freq < bounds[1]:
                     write_freq(curr_freq + step, cpu=core)
                     write_freq(curr_freq + step, cpu=20+core)
-                # elif curr_freq >= 2100000 :
-                #     update_lp = True
-                #     print(update_lp)
                     # we can increase power for low priority tasks
             print("Below limit updating", lp_active, curr_freq)
             if curr_freq >= 2100000 and lp_active:
