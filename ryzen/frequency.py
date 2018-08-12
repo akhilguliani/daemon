@@ -269,27 +269,44 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
     tolerance = 200
     bounds = get_freq_bounds()
     max_per_core = max(hi_freqs)
-    # update_lp = False
+    alpha = abs(limit-curr_power)/TDP
+ 
     if abs(curr_power - limit) < tolerance:
         # at power limit nothing todo
         return False
     elif (limit - curr_power) > -1*tolerance:
         # Below limit
         # We have excess power
-        alpha = abs(limit-curr_power)/TDP
-        extra_freq = 0
+        extra_freq = alpha * max_per_core
         ## distribute excess power - frequency among 
         # First Check if high power apps are at max freq
+        if not (hi_shares is None):
+            add_hi = [s * extra_freq for s in hi_shares]
+            extra_freq = extra_freq - sum(add_hi)
+            hi_freqs = [ x+y for x,y in zip(add_hi, hi_freqs)]
         if not first_limit:
-            if extra_freq >= 2100000 and lp_active:
+            if extra_freq > 100000 and lp_active:
+                if not (low_shares is None):
+                    add_lo = [s * extra_freq for s in low_shares]
+                    extra_freq = extra_freq - sum(add_lo)
+                    low_freqs = [ x+y for x,y in zip(add_lo, low_freqs)]
                 return True
             return False
     elif (curr_power - limit) > tolerance:
         # Above limit
         # We have no excess power
-        if (not first_limit) and lp_active:
-            pass
-        # Reduce freq for high priority cores by one step
+        # remove extra frequency from low power first
+        extra_freq = alpha * max_per_core
+        if lp_active and not(low_shares is None):
+            rem_lo = [s * extra_freq for s in low_shares]
+            extra_freq = extra_freq - sum(rem_lo)
+            low_freqs = [ y-x for x,y in zip(rem_lo, low_freqs)]
+
+        # remove remaining frequency from hi power
+        if not (hi_shares is None):
+            rem_hi = [s * extra_freq for s in hi_shares]
+            extra_freq = extra_freq - sum(rem_hi)
+            hi_freqs = [ y-x for x,y in zip(add_hi, hi_freqs)]
         return False
     return False
 
@@ -298,21 +315,20 @@ def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limi
     tolerance = 200
     step = 100000
     bounds = get_freq_bounds()
-    # update_lp = False
+
+    if abs(curr_power - limit) < tolerance:
+        # at power limit
+        return False
 
     if first_limit:
         # Check if we are above limt
-        if abs(curr_power - limit) < tolerance:
-            # at power limit
-            return False
-        elif (curr_power - limit) < -1*tolerance:
+        if (curr_power - limit) < -1*tolerance:
             # Below limit
             # We have excess power for low priority
             # Set low prio cores to lowest freq
             for core in low_cpus:
                 write_freq(800000, cpu=core)
                 write_freq(800000, cpu=20+core)
-            update_lp = True
             return True
         elif (curr_power - limit) > tolerance:
             # Above limit
@@ -325,10 +341,7 @@ def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limi
                 write_freq(curr_freq - step, cpu=20+core)
             return False
     else:
-        if abs(curr_power - limit) < tolerance:
-            # at power limit
-            return False
-        elif (limit - curr_power) > -1*tolerance:
+        if (limit - curr_power) > -1*tolerance:
             # Below limit
             # We have excess power
             # First Check if high power apps are at max freq
