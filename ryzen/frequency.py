@@ -248,13 +248,13 @@ def keep_limit(curr_power, limit=10000, cpu=0, last_freq=None, first_limit=True)
             change_freq(new_limit, cpu, increase=True)
     return old_freq
 
-def set_per_core_freq(freq_list, cores, start_at=0):
-    """ Write Quantized Frequency Limits """
-    for i in range(start_at, cores):
-        write_freq(quantize(freq_list[i]), i)
+def set_per_core_freq(freq_list, cores):
+    """ Write Quantized Frequency Limits for given lists """
+    for i, core in enumerate(cores):
+        write_freq(quantize(freq_list[i]), core)
     return
 
-def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_shares, first_limit=False, lp_active=False):
+def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_shares, high_cores, low_cores, first_limit=False, lp_active=False):
     ## Write a new controller that takes in shares and power -> affects frequency
     # for Mixed priorities this controller also takes in core priorities with shares
     ### Lower Priority gets throttled to minimum till:
@@ -267,13 +267,12 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
     ######## We continue with this trend till the power drops below limit or we reach
     # old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first)
     tolerance = 200
-    bounds = get_freq_bounds()
     max_per_core = max(hi_freqs)
     alpha = abs(limit-curr_power)/TDP
  
     if abs(curr_power - limit) < tolerance:
         # at power limit nothing todo
-        return False
+        return False, hi_freqs, low_freqs
     elif (limit - curr_power) > -1*tolerance:
         # Below limit
         # We have excess power
@@ -284,14 +283,16 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
             add_hi = [s * extra_freq for s in hi_shares]
             extra_freq = extra_freq - sum(add_hi)
             hi_freqs = [ x+y for x,y in zip(add_hi, hi_freqs)]
+            set_per_core_freq(hi_freqs, high_cores)
         if not first_limit:
             if extra_freq > 100000 and lp_active:
                 if not (low_shares is None):
                     add_lo = [s * extra_freq for s in low_shares]
                     extra_freq = extra_freq - sum(add_lo)
                     low_freqs = [ x+y for x,y in zip(add_lo, low_freqs)]
-                return True
-            return False
+                    set_per_core_freq(low_freqs, low_cores)
+                return True, hi_freqs, low_freqs
+            return False, hi_freqs, low_freqs
     elif (curr_power - limit) > tolerance:
         # Above limit
         # We have no excess power
@@ -301,14 +302,16 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
             rem_lo = [s * extra_freq for s in low_shares]
             extra_freq = extra_freq - sum(rem_lo)
             low_freqs = [ y-x for x,y in zip(rem_lo, low_freqs)]
+            set_per_core_freq(low_freqs, low_cores)
 
         # remove remaining frequency from hi power
         if not (hi_shares is None):
             rem_hi = [s * extra_freq for s in hi_shares]
             extra_freq = extra_freq - sum(rem_hi)
             hi_freqs = [ y-x for x,y in zip(add_hi, hi_freqs)]
-        return False
-    return False
+            set_per_core_freq(hi_freqs, high_cores)
+    
+    return False, hi_freqs, low_freqs
 
 def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limit=True, lp_active=False):
     """ Follow the power limit for Intel skylake priority only"""
