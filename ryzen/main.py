@@ -213,6 +213,9 @@ def main(arg1, perf_file, tree):
             base = 10
         elif not use_rapl:
             # print("Our control Loop")
+            if count < 10:
+                run_lp, hi_freqs, low_freqs = keep_limit_prop_freq(power_tracker, power_limit, hi_freqs, low_freqs, 
+                                                                   hi_shares, low_shares, high_cores, low_cores, first_limit=True, lp_active=False)
             if count == 10:
                 ## High Prio Apps Ramped up
                 # run_lp = keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=True, lp_active=run_lp)

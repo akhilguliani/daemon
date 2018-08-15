@@ -4,7 +4,6 @@ from functools import reduce
 from launcher import parse_file
 from frequency import get_freq_bounds
 
-TDP = 85000
 # def get_freq_bounds():
 #     """ Dummy for offline testing"""
 #     return [800000, 3000000]
@@ -40,7 +39,7 @@ def calc_share_ratios_2(list_prio, inc_cores, ratios):
 
     return shares
 
-def allocate_shares_loop(limit, _proc, max_per_core, cores):
+def allocate_shares_loop(limit, _proc, max_per_core, cores, spill):
     shares_app = calc_share_ratios(_proc, cores)
     left_over_pwr = limit
     limit_per_core = None
@@ -56,16 +55,16 @@ def allocate_shares_loop(limit, _proc, max_per_core, cores):
     limit_per_core = [min(r*limit, max_per_core) for r in shares_app]
     cores_to_include = [False if r >= max_per_core else True for r in limit_per_core]
 
-    print("FIRST ALLOCATION", cores_to_include, limit_per_core)
-    count = 0
-
     # Check for leftover power
     left_over_pwr = left_over_pwr - sum(limit_per_core)
-
-    while int(round(left_over_pwr, 0)) > 0:
+    
+    print("FIRST ALLOCATION", cores_to_include, limit_per_core, left_over_pwr)
+    count = 0
+    
+    while int(round(left_over_pwr, 0)) > spill:
         # we have left over power
 
-        if int(round(left_over_pwr, 0) == 0):
+        if int(round(left_over_pwr, 0) <= spill):
             print("END")
             break
 
@@ -101,7 +100,7 @@ def first_allocation(power, cores, app_file):
     list_procs = parse_file(app_file)
     list_procs.sort(key=itemgetter(3))
 
-    limit = power*1000
+    limit = power # IS ALREADY IN 1000'S
     max_per_core = 10000
     # cores = 4
     high = [r for r in list_procs if r[3] < 0]
@@ -115,7 +114,7 @@ def first_allocation(power, cores, app_file):
         high_set = None
         extra_pwr = limit
     else:
-        extra_pwr, hi_limits, shares_high = allocate_shares_loop(limit, high, max_per_core, cores)
+        extra_pwr, hi_limits, shares_high = allocate_shares_loop(limit, high, max_per_core, cores, 0)
         print("Power left = ", extra_pwr)
         high_set = (hi_limits, shares_high, high)
 
@@ -123,7 +122,7 @@ def first_allocation(power, cores, app_file):
         # We have power for low priority
         # First check if we have cores avialable
         cores_avil = cores-len(high)
-        extra_pwr, lo_limits, shares_lo = allocate_shares_loop(extra_pwr, low, max_per_core, cores_avil)
+        extra_pwr, lo_limits, shares_lo = allocate_shares_loop(extra_pwr, low, max_per_core, cores_avil, 0)
         low_set = (lo_limits, shares_lo, low)
 
     return extra_pwr, high_set, low_set
@@ -131,23 +130,24 @@ def first_allocation(power, cores, app_file):
 def first_freq_allocation(power_limit, cores, app_file):
     list_procs = parse_file(app_file)
     list_procs.sort(key=itemgetter(3))
+    bounds = get_freq_bounds()
     
     high = [r for r in list_procs if r[3] < 0]
     low = [r for r in list_procs if r[3] > 0]
 
-    #TDP = 85*1000
+    TDP = 85*1000
     alpha = 1
-    if power_limit*1000 < TDP:
-        alpha = power_limit*1000/float(TDP)
+    if power_limit < TDP:
+        alpha = power_limit/float(TDP)
     # WARN: hard-coding max frequency for 10 active cores
     # add code to read directly from relevant MSR's
     # if len(list_procs) > 10:
     max_turbo = 2200000
     num_apps = min(len(list_procs),cores)
     if num_apps >= 10 and num_apps < 28:
-        max_turbo = 2500000
+        max_turbo = 2200000
     elif num_apps < 10 and num_apps > 4:
-        max_turbo = 2700000
+        max_turbo = 2500000
     elif num_apps <= 4 and num_apps > 2:
         max_turbo = 2800000
     elif len(list_procs) < 4:
@@ -160,7 +160,7 @@ def first_freq_allocation(power_limit, cores, app_file):
     low_set = None
     extra_freq = freq_limit
     
-    print(freq_limit, alpha, max_per_core, max_turbo)
+    print("FREQ CONFIG: ", power_limit, freq_limit, alpha, max_per_core, max_turbo)
 
     if high is None:
         # we got no High Powe applications
@@ -168,7 +168,9 @@ def first_freq_allocation(power_limit, cores, app_file):
         extra_freq = freq_limit
     else:
         high.sort(key=itemgetter(2))
-        extra_freq, hi_limits, shares_high = allocate_shares_loop(extra_freq, high, max_per_core, min(cores, len(high)))
+        extra_freq, hi_limits, shares_high = allocate_shares_loop(extra_freq, high, max_per_core, min(cores, len(high)), 100000)
+        # WARN: Hack for fixing lower limit for frequency
+        hi_limits = [max(h, bounds[0]) for h in hi_limits] 
         print("freq left = ", extra_freq)
         high_set = (hi_limits, shares_high, high)
     
@@ -180,10 +182,12 @@ def first_freq_allocation(power_limit, cores, app_file):
         # We have power for low priority
         low.sort(key=itemgetter(2)) 
         if int(round(extra_freq, 0)) > 0 :  
-            extra_freq, lo_limits, shares_lo = allocate_shares_loop(extra_freq, low, max_per_core, cores_avil)
+            extra_freq, lo_limits, shares_lo = allocate_shares_loop(extra_freq, low, max_per_core, cores_avil, 100000)
         else:
             # get case for 800 MHz per avialable core
-            _,lo_limits, shares_lo = allocate_shares_loop(800000*cores_avil, low, max_per_core, cores_avil)
+            _,lo_limits, shares_lo = allocate_shares_loop(800000*cores_avil, low, max_per_core, cores_avil, 100000)
+            # WARN: Hack for fixing lower limit for frequency
+            lo_limits = [max(l, bounds[0]) for l in lo_limits] 
             extra_freq = None 
         low_set = (lo_limits, shares_lo, low)
 
@@ -236,7 +240,7 @@ def get_list_limits_cores(power, cores, app_file, opt="Freq"):
         high_cores = [i for i in range(start, len(all_limits))]
         start = len(all_limits)
         end = 0
-        
+
     if not low_set is None:
         #We have low_prio apps
         all_limits += low_set[0]

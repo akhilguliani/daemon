@@ -37,8 +37,11 @@ def set_gov_userspace():
         print("Unspported Driver: please enable intel/acpi_cpufreq from kerenl cmdline")
 
 def quantize(value):
-    ret = int(round(value / 100000, 0))
-    return ret*100000
+    ret = int(round(value / 100000, 0))*100000
+    # inplace to avoid getting frequencies lower than the lowest bounds
+    if ret < 800000:
+        return 800000
+    return ret
 
 def read_freq(cpu=0):
     f_file = "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_cur_freq" % cpu
@@ -287,7 +290,7 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
             hi_freqs = [ x+y for x,y in zip(add_hi, hi_freqs)]
             set_per_core_freq(hi_freqs, high_cores)
         if not first_limit:
-            if extra_freq > 100000 and lp_active:
+            if extra_freq > 200000 and lp_active:
                 if not (low_shares is None):
                     add_lo = [s * extra_freq for s in low_shares]
                     extra_freq = extra_freq - sum(add_lo)
@@ -317,7 +320,7 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
 
 def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limit=True, lp_active=False):
     """ Follow the power limit for Intel skylake priority only"""
-    tolerance = 200
+    tolerance = 1000
     step = 100000
     bounds = get_freq_bounds()
 
