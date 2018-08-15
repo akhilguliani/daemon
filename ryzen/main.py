@@ -242,9 +242,10 @@ def main(arg1, perf_file, tree):
             print(count, power_limit , sum_diff/(count-base), power_tracker, sep=", ")
 
         print("---------------")
-        # print(round(power_tracker, 3))
-        # print(f_dict)
-        # print(round(perf_delta, 3), "\n________")
+        
+        print(round(power_tracker, 3))
+        print(f_dict)
+        print(round(perf_delta, 3), "\n________")
 
         first = False
         # plot_all(f_dict, power_tracker, track_perf, count, cpus[:len(limits)], limits)

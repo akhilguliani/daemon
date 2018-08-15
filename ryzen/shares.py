@@ -233,17 +233,17 @@ def get_list_limits_cores(power, cores, app_file, opt="Freq"):
         high_limits = high_set[0]
         high_shares = high_set[1]
         high_apps = high_set[2]
-        high_cores = [i*2 for i in range(start, len(all_limits))]
+        high_cores = [i for i in range(start, len(all_limits))]
         start = len(all_limits)
-        end = 1
-
+        end = 0
+        
     if not low_set is None:
         #We have low_prio apps
         all_limits += low_set[0]
         low_limits = low_set[0]
         low_shares = low_set[1]
         low_apps = low_set[2]
-        low_cores = [i*2 for i in range(start, start+min(len(low_set[0]), cores)+end)]
+        low_cores = [i for i in range(start, start+min(len(low_set[0]), cores)+end)]
 
     return high_apps, high_cores, low_apps, low_cores, all_limits, high_limits, low_limits, high_shares, low_shares
 

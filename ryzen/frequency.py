@@ -250,8 +250,10 @@ def keep_limit(curr_power, limit=10000, cpu=0, last_freq=None, first_limit=True)
 
 def set_per_core_freq(freq_list, cores):
     """ Write Quantized Frequency Limits for given lists """
+    print("updating cores: ", cores, [quantize(f) for f in freq_list])
     for i, core in enumerate(cores):
         write_freq(quantize(freq_list[i]), core)
+        write_freq(quantize(freq_list[i]), core+20)
     return
 
 def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_shares, high_cores, low_cores, first_limit=False, lp_active=False):
@@ -308,7 +310,7 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
         if not (hi_shares is None):
             rem_hi = [s * extra_freq for s in hi_shares]
             extra_freq = extra_freq - sum(rem_hi)
-            hi_freqs = [ y-x for x,y in zip(add_hi, hi_freqs)]
+            hi_freqs = [ y-x for x,y in zip(rem_hi, hi_freqs)]
             set_per_core_freq(hi_freqs, high_cores)
     
     return False, hi_freqs, low_freqs
