@@ -3,7 +3,7 @@
 by Akhil Guliani
 
 Usage:
-    main.py [-i FILE] [--interval=<seconds>] [--limit=<watts>] [--cores=<num>] [-r BOOL] PID...
+    main.py [-i FILE] [--interval=<seconds>] [--limit=<watts>] [--cores=<num>] [-r BOOL] [-c BOOL] PID...
 
 Arguments:
     PID     pids to track
@@ -15,6 +15,7 @@ Options:
     --limit=<watts>   RAPL limit
     --cores=<num>   Number of cores
     -r --rapl=BOOL
+    -c --control=BOOL
 """
 
 import os
@@ -154,7 +155,8 @@ def main(arg1, perf_file, tree):
     power_limit = rapl_limit*1000
     cores = int(arg1['--cores'])
     use_rapl = eval(arg1['--rapl']) 
-    print(use_rapl)
+    use_control = eval(arg1['--control']) 
+    print("RAPL: ", use_rapl, " - with controller: ", use_control)
     # max_per_core = 10000
     # proc_list, limits = get_list_limits(power_limit, cores, proc_file)
 
@@ -207,10 +209,15 @@ def main(arg1, perf_file, tree):
         count = count + 1
         # for i in range(cores):
         #     pass
-        if use_rapl and first:
-            wait_low_threads.start()
-            set_rapl_limit(rapl_limit)
-            base = 10
+        if use_rapl:
+            if first:
+                print("Using RAPL: ", use_rapl)
+                wait_low_threads.start()
+                set_rapl_limit(rapl_limit)            
+                base = 10
+            elif use_control:
+                run_lp, hi_freqs, low_freqs = keep_limit_prop_freq(power_tracker, power_limit, hi_freqs, low_freqs, 
+                                                    hi_shares, low_shares, high_cores, low_cores, first_limit=False, lp_active=False)
         elif not use_rapl:
             # print("Our control Loop")
             if count < 10:
@@ -270,6 +277,8 @@ if __name__ == "__main__":
                       error='--cores=N should be integer 0 < num < 11'),
         '--rapl': Or(None, And(Use(eval), lambda n: n or True),
                       error='--rapl=True|False'),
+        '--control': Or(None, And(Use(eval), lambda n: n or True),
+                    error='--control=True|False'),
         'PID': [Or(None, And(Use(int), lambda n: 1 < n < 32768),
                    error='PID should be inteager within 1 < N < 32768')],
         })
