@@ -142,7 +142,7 @@ def main(arg1, energy_unit, tree):
     proc_file = arg1['--input']
     power_limit = int(arg1['--limit'])
     cores = int(arg1['--cores'])
-    max_per_core = 10000
+
     #proc_list, limits = get_list_limits(power_limit, cores, proc_file)
     
     # if limits is None:
@@ -150,9 +150,7 @@ def main(arg1, energy_unit, tree):
     # else:
     #     cores = len(limits)
 
-    
-    
-    high_list, high_cores, low_list, low_cores, limits, shares = get_list_limits_cores(power_limit, cores, proc_file)
+    high_list, high_cores, low_list, low_cores, limits, high_limits, low_limits, high_shares, low_shares, shares = get_list_limits_cores(power_limit, cores, proc_file, opt="Power")
     #wait_thread = Process(target = run_on_multiple_cores_forever, args=(proc_list, cpus))
     wait_high_threads = Process(target=run_on_multiple_cores_forever, args=(high_list, high_cores))
     wait_low_threads = Process(target=run_on_multiple_cores_forever, args=(low_list, low_cores))

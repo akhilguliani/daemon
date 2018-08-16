@@ -2,6 +2,7 @@
 from operator import itemgetter
 from functools import reduce
 from launcher import parse_file
+from frequency import get_freq_bounds
 
 def calc_share_ratios(list_prio, cores):
     """ Basic Shares calculator"""
@@ -34,7 +35,7 @@ def calc_share_ratios_2(list_prio, inc_cores, ratios):
 
     return shares
 
-def power_shares_loop(limit, _proc, max_per_core, cores):
+def allocate_shares_loop(limit, _proc, max_per_core, cores, spill):
     shares_app = calc_share_ratios(_proc, cores)
     left_over_pwr = limit
     limit_per_core = None
@@ -50,16 +51,17 @@ def power_shares_loop(limit, _proc, max_per_core, cores):
     limit_per_core = [min(r*limit, max_per_core) for r in shares_app]
     cores_to_include = [False if r >= max_per_core else True for r in limit_per_core]
 
-    print("FIRST ALLOCATION", cores_to_include, limit_per_core)
     count = 0
 
     # Check for leftover power
     left_over_pwr = left_over_pwr - sum(limit_per_core)
 
-    while int(round(left_over_pwr, 0)) > 0:
+    print("FIRST ALLOCATION", cores_to_include, limit_per_core, left_over_pwr)
+
+    while int(round(left_over_pwr, 0)) > spill:
         # we have left over power
 
-        if int(round(left_over_pwr, 0) == 0):
+        if int(round(left_over_pwr, 0) <= spill):
             print("END")
             break
 
@@ -86,7 +88,7 @@ def power_shares_loop(limit, _proc, max_per_core, cores):
 
         cores_to_include = [False if r >= max_per_core else True for r in limit_per_core]
         left_over_pwr = left_over_pwr - sum(limit_per_core)
-    print("Pwer left = ", left_over_pwr)
+    print("Entity left = ", left_over_pwr)
     left_over_pwr = 0 if left_over_pwr < 0 else left_over_pwr
     return left_over_pwr, limit_per_core, shares_app
 
@@ -110,7 +112,7 @@ def first_allocation(power, cores, app_file):
         extra_pwr = limit
     else:
         high.sort(key=itemgetter(2))
-        extra_pwr, hi_limits, shares_high = power_shares_loop(limit, high, max_per_core, cores)
+        extra_pwr, hi_limits, shares_high = allocate_shares_loop(limit, high, max_per_core, cores, 0)
         print("Power left = ", extra_pwr)
         high_set = (hi_limits, shares_high, high)
 
@@ -121,11 +123,11 @@ def first_allocation(power, cores, app_file):
         # First check if we have cores avialable
         low.sort(key=itemgetter(2)) 
         if int(round(extra_pwr, 0)) > 0 :  
-            extra_pwr, lo_limits, shares_lo = power_shares_loop(extra_pwr, low, max_per_core, cores_avil)
+            extra_pwr, lo_limits, shares_lo = allocate_shares_loop(extra_pwr, low, max_per_core, cores_avil, 0)
         else:
             # get case for 1 W per avialable core
-            _,lo_limits, shares_lo = power_shares_loop(1000*cores_avil, low, max_per_core, cores_avil)
-            extra_power = None 
+            _,lo_limits, shares_lo = allocate_shares_loop(1000*cores_avil, low, max_per_core, cores_avil, 0)
+            extra_pwr = None 
         low_set = (lo_limits, shares_lo, low)
 
     return extra_pwr, high_set, low_set
@@ -148,37 +150,105 @@ def get_list_limits(power, cores, app_file):
 
     return all_apps, all_limits
 
+def first_freq_allocation(power_limit, cores, app_file):
+    list_procs = parse_file(app_file)
+    list_procs.sort(key=itemgetter(3))
+    bounds = get_freq_bounds()
+    
+    high = [r for r in list_procs if r[3] < 0]
+    low = [r for r in list_procs if r[3] > 0]
 
+    TDP = 85*1000
+    alpha = 1
+    if power_limit < TDP:
+        alpha = power_limit/float(TDP)
+    # WARN: hard-coding max frequency for 10 active cores
+    # add code to read directly from relevant MSR's
+    # if len(list_procs) > 10:
+    max_turbo = 3400000
+    
+    max_per_core = min(get_freq_bounds()[1],max_turbo)
+    freq_limit = alpha * max_per_core * cores
 
-def get_list_limits_cores(power, cores, app_file):
-    extra_power, high_set, low_set = first_allocation(power, cores, app_file)
+    high_set = None
+    low_set = None
+    extra_freq = freq_limit
+    
+    print("FREQ CONFIG: ", power_limit, freq_limit, alpha, max_per_core, max_turbo)
+
+    if high is None:
+        # we got no High Powe applications
+        high_set = None
+        extra_freq = freq_limit
+    else:
+        high.sort(key=itemgetter(2))
+        extra_freq, hi_limits, shares_high = allocate_shares_loop(extra_freq, high, max_per_core, min(cores, len(high)), 100000)
+        # WARN: Hack for fixing lower limit for frequency
+        hi_limits = [max(h, bounds[0]) for h in hi_limits] 
+        print("freq left = ", extra_freq)
+        high_set = (hi_limits, shares_high, high)
+    
+    # First check if we have cores avialable
+    cores_avil = cores if high is None else cores-len(high)
+    
+    # if int(round(extra_pwr, 0)) > 0 and not(low is None) and cores_avil > 0:
+    if  not(low is None) and cores_avil > 0:
+        # We have power for low priority
+        low.sort(key=itemgetter(2)) 
+        if int(round(extra_freq, 0)) > 0 :  
+            extra_freq, lo_limits, shares_lo = allocate_shares_loop(extra_freq, low, max_per_core, cores_avil, 100000)
+        else:
+            # get case for 800 MHz per avialable core
+            _,lo_limits, shares_lo = allocate_shares_loop(800000*cores_avil, low, max_per_core, cores_avil, 100000)
+            # WARN: Hack for fixing lower limit for frequency
+            lo_limits = [max(l, bounds[0]) for l in lo_limits] 
+            extra_freq = None 
+        low_set = (lo_limits, shares_lo, low)
+
+    return extra_freq, high_set, low_set
+
+def get_list_limits_cores(power, cores, app_file, opt="Power"):
+    high_set = None
+    low_set = None
     all_limits = None
     all_shares = None
     high_apps = None
     low_apps = None
     high_cores = None
     low_cores = None
+    high_limits = None
+    low_limits = None
+    high_shares = None
+    low_shares = None
     start = 0
-    end = 0
+
+    if opt == "Freq":
+        __, high_set, low_set = first_freq_allocation(power, cores, app_file)
+    elif opt == "Power":
+        __, high_set, low_set = first_allocation(power, cores, app_file)
 
     if not high_set is None:
         #We have high_prio apps
         all_limits = high_set[0]
+        high_limits = high_set[0]
+        high_shares = high_set[1]
         high_apps = high_set[2]
         high_cores = [i*2 for i in range(start, len(all_limits))]
         all_shares = high_set[1] # get high shares 
         start = len(all_limits)
-        end = start
 
     if not low_set is None:
         #We have low_prio apps
         all_limits += low_set[0]
+        low_limits = low_set[0]
+        low_shares = low_set[1]
         low_apps = low_set[2]
         low_cores = [i*2 for i in range(start, min(start+len(low_set[0]), cores))]
         if not (low_cores is None):
             all_shares += [low_set[1][i] for i in range(len(low_cores))] # get high shares
 
-    return high_apps, high_cores, low_apps, low_cores, all_limits, all_shares
+    return high_apps, high_cores, low_apps, low_cores, all_limits, high_limits, low_limits, high_shares, low_shares, all_shares
+    # return high_apps, high_cores, low_apps, low_cores, all_limits, all_shares
 
 def get_new_limits(all_shares, start_index, excess_power, all_limits, cores, alpha=1, freqs=None):
     print("UPDATE LIMITS:", all_shares)
