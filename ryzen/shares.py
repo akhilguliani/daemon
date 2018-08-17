@@ -2,7 +2,7 @@
 from operator import itemgetter
 from functools import reduce
 from launcher import parse_file
-from frequency import get_freq_bounds
+from frequency import get_freq_bounds_ryzen
 
 def calc_share_ratios(list_prio, cores):
     """ Basic Shares calculator"""
@@ -153,21 +153,21 @@ def get_list_limits(power, cores, app_file):
 def first_freq_allocation(power_limit, cores, app_file):
     list_procs = parse_file(app_file)
     list_procs.sort(key=itemgetter(3))
-    bounds = get_freq_bounds()
+    bounds = get_freq_bounds_ryzen()
     
     high = [r for r in list_procs if r[3] < 0]
     low = [r for r in list_procs if r[3] > 0]
 
     TDP = 85*1000
     alpha = 1
-    if power_limit < TDP:
-        alpha = power_limit/float(TDP)
+    if power_limit*1000 < TDP:
+        alpha = power_limit*1000/float(TDP)
     # WARN: hard-coding max frequency for 10 active cores
     # add code to read directly from relevant MSR's
     # if len(list_procs) > 10:
     max_turbo = 3400000
     
-    max_per_core = min(get_freq_bounds()[1],max_turbo)
+    max_per_core = min(get_freq_bounds_ryzen()[1],max_turbo)
     freq_limit = alpha * max_per_core * cores
 
     high_set = None

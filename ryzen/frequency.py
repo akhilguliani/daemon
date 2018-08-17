@@ -4,6 +4,8 @@ import subprocess
 import time
 from msr import update_pstate_freq
 
+TDP = 95000
+
 def get_freq_bounds(cpu=0):
     bounds = [0, 0]
     freq_file = open("/sys/devices/system/cpu/cpu%d/cpufreq/scaling_max_freq" % cpu, 'r')
@@ -36,6 +38,8 @@ def set_gov_userspace():
 def quantize(value):
     import math
     ret = math.ceil(value / 100000)
+    if ret < 8:
+        return 800000 
     return ret*100000
 
 def read_freq(cpu=0):
@@ -54,7 +58,7 @@ def read_freq_real(cpu=0):
     return int(ret_val)
 
 def write_freq(val, cpu=0):
-    bounds = get_freq_bounds()
+    bounds = get_freq_bounds_ryzen()
     if val <= bounds[1] and val >= bounds[0]:
 #        print("Changing Freq to ", str(val))
         f_file = "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_setspeed" % cpu
@@ -92,7 +96,7 @@ def update_write_freq(val, cpu=0, turbo=False, update=True):
 
 def set_to_max_freq(cpu=None):
     """ Set all the cpus to max frequency"""
-    max_freq = get_freq_bounds()[1]
+    max_freq = get_freq_bounds_ryzen()[1]
     if cpu is None:
         for c in range(psutil.cpu_count()):
             write_freq(max_freq, c)
@@ -266,3 +270,66 @@ def keep_limit(curr_power, limit, cpu=0, last_freq=None, first_limit=True, leade
             # print("Increase")
             old_freq = change_freq(new_limit, cpu, increase=True, Update=leader)
     return old_freq
+
+def set_per_core_freq(freq_list, cores):
+    """ Write Quantized Frequency Limits for given lists """
+    print("updating cores: ", cores, [quantize(f) for f in freq_list])
+    for i, core in enumerate(cores):
+        # print(i, core, quantize(freq_list[i]))
+        update_write_freq(quantize(freq_list[i]), core, update=True)
+        if core % 2 == 0:
+            write_freq(quantize(freq_list[i]), core+1)
+        else:
+            write_freq(quantize(freq_list[i]), core-1)
+    return
+
+def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_shares, high_cores, low_cores, first_limit=False, lp_active=False):
+    """ Proportional frequency power controller adapted from skylake branch """
+    tolerance = 500
+    max_per_core = max(hi_freqs)
+    alpha = abs(limit-curr_power)/TDP
+
+    print(limit)
+
+    if abs(curr_power - limit) < tolerance:
+        # at power limit nothing todo
+        return False, hi_freqs, low_freqs
+    elif (limit - curr_power) > -1*tolerance:
+        # Below limit
+        # We have excess power
+        extra_freq = alpha * max_per_core
+        ## distribute excess power - frequency among 
+        # First Check if high power apps are at max freq
+        if not (hi_shares is None):
+            add_hi = [s * extra_freq for s in hi_shares]
+            extra_freq = extra_freq - sum(add_hi)
+            hi_freqs = [ x+y for x,y in zip(add_hi, hi_freqs)]
+            set_per_core_freq(hi_freqs, high_cores)
+        if not first_limit:
+            if extra_freq > 200000 and lp_active:
+                if not (low_shares is None):
+                    add_lo = [s * extra_freq for s in low_shares]
+                    extra_freq = extra_freq - sum(add_lo)
+                    low_freqs = [ x+y for x,y in zip(add_lo, low_freqs)]
+                    set_per_core_freq(low_freqs, low_cores)
+                return True, hi_freqs, low_freqs
+            return False, hi_freqs, low_freqs
+    elif (curr_power - limit) > tolerance:
+        # Above limit
+        # We have no excess power
+        # remove extra frequency from low power first
+        extra_freq = alpha * max_per_core
+        if lp_active and not(low_shares is None):
+            rem_lo = [s * extra_freq for s in low_shares]
+            extra_freq = extra_freq - sum(rem_lo)
+            low_freqs = [ y-x for x,y in zip(rem_lo, low_freqs)]
+            set_per_core_freq(low_freqs, low_cores)
+
+        # remove remaining frequency from hi power
+        if not (hi_shares is None):
+            rem_hi = [s * extra_freq for s in hi_shares]
+            extra_freq = extra_freq - sum(rem_hi)
+            hi_freqs = [ y-x for x,y in zip(rem_hi, hi_freqs)]
+            set_per_core_freq(hi_freqs, high_cores)
+    
+    return False, hi_freqs, low_freqs
