@@ -138,7 +138,7 @@ def first_freq_allocation(power_limit, cores, app_file):
     TDP = 85*1000
     alpha = 1
     if power_limit < TDP:
-        alpha = power_limit/float(TDP)
+        alpha = (power_limit)/float(TDP)
     # WARN: hard-coding max frequency for 10 active cores
     # add code to read directly from relevant MSR's
     # if len(list_procs) > 10:
@@ -195,7 +195,7 @@ def first_freq_allocation(power_limit, cores, app_file):
 
 def get_list_limits(power, cores, app_file):
     """ Get Priority Applications, and their corresponding Power Shares and Limits"""
-    extra_power, high_set, low_set = first_allocation(power, cores, app_file)
+    _, high_set, low_set = first_allocation(power, cores, app_file)
     all_limits = None
     all_apps = None
 

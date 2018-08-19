@@ -37,10 +37,12 @@ def set_gov_userspace():
         print("Unspported Driver: please enable intel/acpi_cpufreq from kerenl cmdline")
 
 def quantize(value):
-    ret = int(round(value / 100000, 0))*100000
-    # inplace to avoid getting frequencies lower than the lowest bounds
+    from decimal import Decimal
+    ret = int(Decimal(value/100000).quantize(Decimal("1"))*100000)
+    if ret > 3000000:
+        return 3000000
     if ret < 800000:
-        return 800000
+        return 800000 
     return ret
 
 def read_freq(cpu=0):
@@ -273,6 +275,7 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
     # old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first)
     tolerance = 200
     max_per_core = max(hi_freqs)
+    max_freq = 2200000
     alpha = abs(limit-curr_power)/TDP
  
     if abs(curr_power - limit) < tolerance:
@@ -285,10 +288,14 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
         ## distribute excess power - frequency among 
         # First Check if high power apps are at max freq
         if not (hi_shares is None):
-            add_hi = [s * extra_freq for s in hi_shares]
-            extra_freq = extra_freq - sum(add_hi)
-            hi_freqs = [ x+y for x,y in zip(add_hi, hi_freqs)]
-            set_per_core_freq(hi_freqs, high_cores)
+            shares_per_core = [hi_shares[i] if not (math.isclose(hi_freqs[i],3400000,rel_tol=0.001)) else 0 for i in range(len(high_cores))]
+            sum_shares = sum(shares_per_core)
+            if not math.isclose(sum_shares, 0):
+                add_hi = [(s * extra_freq / sum_shares) for s in shares_per_core]
+                extra_freq = extra_freq - sum(add_hi)
+                hi_freqs = [ min(x+y, max_freq) for x,y in zip(add_hi, hi_freqs)]
+                set_per_core_freq(hi_freqs, high_cores)
+                max_per_core = max(hi_freqs)
         if not first_limit:
             if extra_freq > 200000 and lp_active:
                 if not (low_shares is None):
@@ -311,10 +318,13 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
 
         # remove remaining frequency from hi power
         if not (hi_shares is None):
-            rem_hi = [s * extra_freq for s in hi_shares]
-            extra_freq = extra_freq - sum(rem_hi)
-            hi_freqs = [ y-x for x,y in zip(rem_hi, hi_freqs)]
-            set_per_core_freq(hi_freqs, high_cores)
+            shares_per_core = [hi_shares[i] if not (math.isclose(hi_freqs[i],800000,rel_tol=0.05)) else 0 for i in range(len(high_cores))]
+            sum_shares = sum(shares_per_core)
+            if not math.isclose(sum_shares, 0):
+                rem_hi = [(s * extra_freq)/sum_shares for s in shares_per_core]
+                extra_freq = extra_freq - sum(rem_hi)
+                hi_freqs = [ y-x for x,y in zip(rem_hi, hi_freqs)]
+                set_per_core_freq(hi_freqs, high_cores)
     
     return False, hi_freqs, low_freqs
 
