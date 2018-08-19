@@ -143,7 +143,8 @@ def update_pkg(before, after):
     if (before is None) or (after is None):
         return 0
     if  (after < before):
-        return 0x100000000 + after
+        # return 0x100000000 + after
+        return after
     else:
         return after - before
 

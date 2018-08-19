@@ -2,6 +2,8 @@
 import psutil
 import subprocess
 import time
+import math
+from collections import Counter
 from msr import update_pstate_freq
 
 TDP = 95000
@@ -36,11 +38,13 @@ def set_gov_userspace():
         print("Unspported Driver: please enable intel/acpi_cpufreq from kerenl cmdline")
 
 def quantize(value):
-    import math
-    ret = math.ceil(value / 100000)
-    if ret < 8:
+    from decimal import Decimal
+    ret = int(Decimal(value/25000).quantize(Decimal("1"))*25000)
+    if ret > 3400000:
+        return 3400000
+    if ret < 800000:
         return 800000 
-    return ret*100000
+    return ret
 
 def read_freq(cpu=0):
     f_file = "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_cur_freq" % cpu
@@ -67,6 +71,19 @@ def write_freq(val, cpu=0):
         freq_file.close()
     return
 
+def ryzen_write_freq(val, bounds, cpu=0):
+    """ AMD Ryzen Specific write frequency function
+    This function is needed when we have more than two frequencies for the same P-state
+    """
+    states = [2200000, 3000000, 3400000]
+    if val > bounds[0] and val <= bounds[1]:
+        write_freq(states[1], cpu)
+    elif val <= bounds[0] and val >= 400000:
+        write_freq(states[0], cpu)
+    elif val > bounds[1] and val <= bounds[2]:
+        write_freq(states[2], cpu)
+    return
+
 def update_write_freq(val, cpu=0, turbo=False, update=True):
     """ AMD Ryzen Specific write frequency loop
         Here we update the relevant P-State to match the val given
@@ -78,16 +95,16 @@ def update_write_freq(val, cpu=0, turbo=False, update=True):
     states = [2200000, 3000000, 3400000]
     #if val in states:
     #    write_freq(val, cpu)
-    if val > states[0] and val < states[-1]:
+    if val > states[0] and val < states[1]:
         # Update state 1 to mean val
         if update:
             update_pstate_freq(val, 1)
         write_freq(states[1], cpu)
-    elif val <= states[0] and val > 400000:
+    elif val <= states[0] and val >= 400000:
         if update:
             update_pstate_freq(val, 2)
         write_freq(states[0], cpu)
-    elif val >= states[-1] and val <= max_freq:
+    elif val >= states[1] and val <= max_freq:
         # Overclocking
         if update:
             update_pstate_freq(val, 0)
@@ -204,7 +221,7 @@ def change_freq_std(target_pwr, current_pwr, old_freq=None, cpu=0, increase=Fals
 
 
     power_diff = abs(current_pwr - target_pwr)
-    step = 100000
+    step = 25000
 
     # Select the right step size
     if power_diff < 300:
@@ -271,7 +288,7 @@ def keep_limit(curr_power, limit, cpu=0, last_freq=None, first_limit=True, leade
             old_freq = change_freq(new_limit, cpu, increase=True, Update=leader)
     return old_freq
 
-def set_per_core_freq(freq_list, cores):
+def set_per_core_freq_old(freq_list, cores):
     """ Write Quantized Frequency Limits for given lists """
     print("updating cores: ", cores, [quantize(f) for f in freq_list])
     for i, core in enumerate(cores):
@@ -283,10 +300,70 @@ def set_per_core_freq(freq_list, cores):
             write_freq(quantize(freq_list[i]), core-1)
     return
 
+def set_per_core_freq(freq_list, cores):
+    """ Write Quantized Frequency Limits for given lists """
+    bounds = get_freq_bounds()
+    freqs = [quantize(f) for f in freq_list]
+    freqs_set = set(freqs) 
+    freq_dict = {0:set(), 1:set(), 2:set()}
+    count_dict = {0:0, 1:0, 2:0}
+    # find seperate pstates 
+    for val in freqs_set:
+        if val <= bounds[0]:
+            count_dict[2] += 1
+            freq_dict[2].add(val)
+        elif val > bounds[0] and  val <= 3000000:
+            count_dict[1] +=1
+            freq_dict[1].add(val)
+        elif val > 3000000 and val <= bounds[1]:
+            count_dict[0] +=1
+            freq_dict[0].add(val)
+    print(count_dict)
+    print(freq_dict)
+
+    # figure out which ones to update
+    needSeparation = False
+    sep_key = None
+    for key, value in freq_dict.items():
+        #print(value)
+        if value != set():
+            needSeparation = needSeparation or (len(value) >= 2)
+            sep_key = key 
+    print(len(freqs_set), freqs_set)
+    new_bounds = None
+    if needSeparation and sep_key is not None:
+        # print(sep_key, max(freq_dict[sep_key]), min(freq_dict[sep_key]))
+        # update p-states
+        if sep_key != 0:
+            print("Updating")
+            update_pstate_freq(max(freq_dict[sep_key]), sep_key-1)
+            update_pstate_freq(min(freq_dict[sep_key]), sep_key)
+            new_bounds =[min(freq_dict[sep_key]), max(freq_dict[sep_key])+25000, 3400000]
+        # then write values
+    if new_bounds is not None:
+        print(new_bounds)
+        for i, core in enumerate(cores):
+            ryzen_write_freq(freqs[i], new_bounds, cpu=core)
+            if core % 2 == 0:
+                ryzen_write_freq(freqs[i], new_bounds, cpu=core+1)
+            else:
+                ryzen_write_freq(freqs[i], new_bounds, cpu=core-1)
+    else:
+        print("updating cores: ", cores, freqs)    
+        for i, core in enumerate(cores):
+            # print(i, core, quantize(freq_list[i]))
+            update_write_freq(quantize(freq_list[i]), core, update=True)
+            if core % 2 == 0:
+                update_write_freq(quantize(freq_list[i]), core+1, update=False)
+            else:
+                update_write_freq(quantize(freq_list[i]), core-1, update=False)
+    return
+
 def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_shares, high_cores, low_cores, first_limit=False, lp_active=False):
     """ Proportional frequency power controller adapted from skylake branch """
     tolerance = 500
     max_per_core = max(hi_freqs)
+    max_freq = 3400000
     alpha = abs(limit-curr_power)/TDP
 
     print(limit)
@@ -301,16 +378,20 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
         ## distribute excess power - frequency among 
         # First Check if high power apps are at max freq
         if not (hi_shares is None):
-            add_hi = [s * extra_freq for s in hi_shares]
-            extra_freq = extra_freq - sum(add_hi)
-            hi_freqs = [ x+y for x,y in zip(add_hi, hi_freqs)]
-            set_per_core_freq(hi_freqs, high_cores)
+            shares_per_core = [hi_shares[i] if not (math.isclose(hi_freqs[i],3400000,rel_tol=0.001)) else 0 for i in range(len(high_cores))]
+            sum_shares = sum(shares_per_core)
+            if not math.isclose(sum_shares, 0):
+                add_hi = [(s * extra_freq / sum_shares) for s in shares_per_core]
+                extra_freq = extra_freq - sum(add_hi)
+                hi_freqs = [ min(x+y, max_freq) for x,y in zip(add_hi, hi_freqs)]
+                set_per_core_freq(hi_freqs, high_cores)
+                max_per_core = max(hi_freqs)
         if not first_limit:
             if extra_freq > 200000 and lp_active:
                 if not (low_shares is None):
                     add_lo = [s * extra_freq for s in low_shares]
                     extra_freq = extra_freq - sum(add_lo)
-                    low_freqs = [ x+y for x,y in zip(add_lo, low_freqs)]
+                    low_freqs = [ min(x+y, max_per_core) for x,y in zip(add_lo, low_freqs)]
                     set_per_core_freq(low_freqs, low_cores)
                 return True, hi_freqs, low_freqs
             return False, hi_freqs, low_freqs
@@ -327,9 +408,12 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
 
         # remove remaining frequency from hi power
         if not (hi_shares is None):
-            rem_hi = [s * extra_freq for s in hi_shares]
-            extra_freq = extra_freq - sum(rem_hi)
-            hi_freqs = [ y-x for x,y in zip(rem_hi, hi_freqs)]
-            set_per_core_freq(hi_freqs, high_cores)
+            shares_per_core = [hi_shares[i] if not (math.isclose(hi_freqs[i],800000,rel_tol=0.05)) else 0 for i in range(len(high_cores))]
+            sum_shares = sum(shares_per_core)
+            if not math.isclose(sum_shares, 0):
+                rem_hi = [(s * extra_freq)/sum_shares for s in shares_per_core]
+                extra_freq = extra_freq - sum(rem_hi)
+                hi_freqs = [ y-x for x,y in zip(rem_hi, hi_freqs)]
+                set_per_core_freq(hi_freqs, high_cores)
     
     return False, hi_freqs, low_freqs

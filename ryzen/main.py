@@ -240,7 +240,7 @@ def main(arg1, energy_unit, tree):
                         control_start = len(high_cores)+len(low_cores)
                         lp_active = True
                 
-                if count % 40 == 0:
+                if count % 40 == 0 and False:
                     # Unused Power redistribution hack (ony for proporional share) comment out for priority runs
                     if power_limit*1000 - current_power  > 2000:
                         # print("Have excess_Power")
