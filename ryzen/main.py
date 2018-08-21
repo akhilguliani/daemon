@@ -29,7 +29,7 @@ from schema import Schema, And, Or, Use, SchemaError
 from topology import cpu_tree
 from msr import AMD_MSR_CORE_ENERGY, writemsr, readmsr, get_percore_msr, get_percore_energy, get_units, setup_perf, get_package_energy
 from tracker import PerCoreTracker, update_delta, update_delta_32, update_pkg
-from frequency import keep_limit_prop_freq, keep_limit, read_freq_real, set_gov_userspace, set_to_max_freq
+from frequency import keep_limit_prop_freq, keep_limit_prop_power, keep_limit, read_freq_real, set_gov_userspace, set_to_max_freq, set_per_core_freq
 from launcher import run_on_multiple_cores_forever, launch_on_core, wait_for_procs
 from operator import itemgetter
 from multiprocessing import Process
@@ -71,7 +71,7 @@ def exit_when_done(procs):
 
 def launch_all_with_post_fn(list_proc, post_exec_fn):
     """Launch all the process in the list on successive cores"""
-    retdict, retval = launch_all(list_proc)
+    _, retval = launch_all(list_proc)
     wait_for_procs(retval, post_exec_fn)
     return
 
@@ -138,7 +138,7 @@ def main(arg1, energy_unit, tree):
     sum_package = 0
 
     first = True
-    old_freq = [None] * len(cpus)
+    # old_freq = [None] * len(cpus)
     count = 0
     proc_file = arg1['--input']
     power_limit = int(arg1['--limit'])
@@ -158,6 +158,11 @@ def main(arg1, energy_unit, tree):
     wait_high_threads = Process(target=run_on_multiple_cores_forever, args=(high_list, high_cores))
     wait_low_threads = Process(target=run_on_multiple_cores_forever, args=(low_list, low_cores))
     
+    hi_pwr = None
+    low_pwr = None
+    low_freqs = None
+    high_freqs = None
+
     if low_list is None:
         print("Low", "None", "None")
     else:
@@ -176,7 +181,7 @@ def main(arg1, energy_unit, tree):
 
     power_diff = 0
 
-    control_start = len(high_cores)
+    # control_start = len(high_cores)
 
     first_control = True
     lp_active = False
@@ -215,61 +220,126 @@ def main(arg1, energy_unit, tree):
         f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
 
         if option == "power":
-            if count < 5:
-                pass
-            elif count > 5 and count < 30 :
-                for i in range(len(high_cores)):
-                    if i == 0:
-                        old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_limit=first_control, leader=True)
-                    else:
-                        #old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], False)
-                        old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_limit=first_control)
+            # if count < 5:
+            #     pass
+            # elif count > 5 and count < 30 :
+            #     for i in range(len(high_cores)):
+            #         if i == 0:
+            #             old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_limit=first_control, leader=True)
+            #         else:
+            #             #old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], False)
+            #             old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_limit=first_control)
+
+            #     print(old_freq)
+            #     set_per_core_freq(old_freq[:len(high_cores)], high_cores)
+            #     first_control = False
+            #     base = count
+            # elif count > 30:
+            #     # check if we have enough power for low priority
+            #     current_power   = sum([power_tracker[i*2] for i in range(cores)])
+            #     if first and not (low_cores is None):
+            #         print("RUNNIG LOW", power_limit*1000 - current_power,( power_limit - current_power > 1*1000*len(low_cores)) )
+            #         if power_limit*1000 - current_power  > 1000*len(low_cores):
+            #             # we have excess power at a steady enough state for Low Priority
+            #             excess = abs(power_limit*1000 - current_power)
+            #             limits = get_new_limits(shares, control_start, excess, limits, cores)
+            #             print("New Limits", limits)
+            #             wait_low_threads.start()
+            #             control_start = len(high_cores)+len(low_cores)
+            #             lp_active = True
+                
+            #     if count % 50 == 0:
+            #         # Unused Power redistribution hack (ony for proporional share) comment out for priority runs
+            #         if power_limit*1000 - current_power  > 1500:
+            #             # print("Have excess_Power")
+            #             # we have more than two watss to distribute
+            #             # we increase limts for all (will have no effect on programs already at highest p_state)
+            #             excess = abs(power_limit*1000 - current_power)
+            #             limits = get_new_limits(shares, 0, excess, limits, cores, freqs=list(f_dict.values()))
+
+            #     for i in range(control_start):
+            #         if lp_active:
+            #             leader_conditon = (i == 0 or i == len(high_cores))
+            #         else:
+            #             leader_conditon = (i == 0 or i == 4)
+
+            #         # print(leader_conditon, lp_active)
+            #         if leader_conditon:
+            #             old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_limit=False, leader=True)
+            #         else:
+            #             old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], False)
+                
+            #     print(old_freq)
+            #     if lp_active:
+            #         set_per_core_freq(old_freq, high_cores+low_cores)
+            #     else:
+            #         set_per_core_freq(old_freq[:len(high_cores)], high_cores)
+
+            #     sum_perf = sum_perf + perf_delta
+            #     sum_freq = sum_freq + f_dict
+            #     sum_power = sum_power + power_tracker
+            #     sum_package = sum_package + package_pwr
+            if count > 5 and count < 30 :
+                if not high_cores is None:
+                    hi_pwr = [v for k, v in power_tracker.items() if k in high_cores]
+                    if first_control: 
+                        high_freqs = [v for k, v in f_dict.items() if k in high_cores]
+                    print(hi_pwr)
+                if not low_cores is None:
+                    low_pwr = [v for k, v in power_tracker.items() if k in low_cores]
+                    if first_control:
+                        low_freqs = [v for k, v in f_dict.items() if k in low_cores]
+
+                run_lp, high_limits, low_limits, high_freqs, low_freqs = keep_limit_prop_power(package_tracker, power_limit*1000, 
+                                                                       high_limits, low_limits, 
+                                                                       high_freqs, low_freqs,
+                                                                       high_shares, low_shares, 
+                                                                       high_cores, low_cores, 
+                                                                       hi_pwr, low_pwr, 
+                                                                       first_limit=first_control, lp_active=False)
                 first_control = False
                 base = count
             elif count > 30:
+                if not high_cores is None:
+                    hi_pwr = [v for k, v in power_tracker.items() if k in high_cores]
+                    if first_control: 
+                        high_freqs = [v for k, v in f_dict.items() if k in high_cores]
+                    print(hi_pwr)
+                if not low_cores is None:
+                    low_pwr = [v for k, v in power_tracker.items() if k in low_cores]
+                    if first_control:
+                        low_freqs = [v for k, v in f_dict.items() if k in low_cores]
                 # check if we have enough power for low priority
-                current_power   = sum([power_tracker[i*2] for i in range(cores)])
+                # current_power   = sum([power_tracker[i*2] for i in range(cores)])
+                current_power = package_tracker
                 if first and not (low_cores is None):
-                    print("RUNNIG LOW", power_limit*1000 - current_power,( power_limit - current_power > 1*1000*len(low_cores)) )
-                    if power_limit*1000 - current_power  > 1000*len(low_cores):
+                    print("RUNNIG LOW: ", power_limit*1000 - current_power,( power_limit*1000 - current_power > 1000*len(low_cores)) )
+                    if power_limit*1000 - current_power  > 1000*len(low_cores) and run_lp:
                         # we have excess power at a steady enough state for Low Priority
-                        excess = abs(power_limit*1000 - current_power)
-                        limits = get_new_limits(shares, control_start, excess, limits, cores)
-                        print("New Limits", limits)
+                        # excess = abs(power_limit*1000 - current_power)
+                        # low_limits = get_new_limits(low_shares, 0, excess, low_limits, low_cores, alpha=(excess/95000))
+                        # print("New low Limits", low_limits)
                         wait_low_threads.start()
-                        control_start = len(high_cores)+len(low_cores)
                         lp_active = True
-                
-                if count % 40 == 0 and False:
-                    # Unused Power redistribution hack (ony for proporional share) comment out for priority runs
-                    if power_limit*1000 - current_power  > 2000:
-                        # print("Have excess_Power")
-                        # we have more than two watss to distribute
-                        # we increase limts for all (will have no effect on programs already at highest p_state)
-                        excess = abs(power_limit*1000 - current_power)
-                        limits = get_new_limits(shares, 0, excess, limits, cores, freqs=list(f_dict.values()))
+                    first = False
 
-                for i in range(control_start):
-                    if lp_active:
-                        leader_conditon = (i == 0 or i == len(high_cores))
-                    else:
-                        leader_conditon = (i == 0 or i == 4)
-
-                    # print(leader_conditon, lp_active)
-                    if leader_conditon:
-                        old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first_limit=False, leader=True)
-                    else:
-                        old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], False)
+                run_lp, high_limits, low_limits, high_freqs, low_freqs = keep_limit_prop_power(package_tracker, power_limit*1000, 
+                                                                        high_limits, low_limits,
+                                                                        high_freqs, low_freqs, 
+                                                                        high_shares, low_shares, 
+                                                                        high_cores, low_cores, hi_pwr, low_pwr, 
+                                                                        first_limit=first_control, lp_active=lp_active)
 
                 sum_perf = sum_perf + perf_delta
                 sum_freq = sum_freq + f_dict
                 sum_power = sum_power + power_tracker
                 sum_package = sum_package + package_pwr
-        
+
         elif option == "freq":
 
             if count > 5 and count < 30 :
-                run_lp, high_limits, low_limits = keep_limit_prop_freq(package_tracker, power_limit*1000, high_limits, low_limits, 
+                run_lp, high_limits, low_limits = keep_limit_prop_freq(package_tracker, power_limit*1000, 
+                                                                       high_limits, low_limits, 
                                                                        high_shares, low_shares, high_cores, low_cores, 
                                                                        first_limit=first_control, lp_active=False)
                 first_control = False
@@ -282,7 +352,7 @@ def main(arg1, energy_unit, tree):
                     print("RUNNIG LOW: ", power_limit*1000 - current_power,( power_limit*1000 - current_power > 1000*len(low_cores)) )
                     if power_limit*1000 - current_power  > 1000*len(low_cores) and run_lp:
                         # we have excess power at a steady enough state for Low Priority
-                        excess = abs(power_limit*1000 - current_power)
+                        # excess = abs(power_limit*1000 - current_power)
                         # low_limits = get_new_limits(low_shares, 0, excess, low_limits, low_cores, alpha=(excess/95000))
                         # print("New low Limits", low_limits)
                         wait_low_threads.start()
@@ -327,8 +397,8 @@ if __name__ == "__main__":
             error='input FILE should be readable'))),
         '--interval': Or(None, And(Use(int), lambda n: 0 < n < 1000),
             error='--interval=N should be integer 0 < N < 1000'),
-        '--limit': Or(None, And(Use(int), lambda n: 0 < n < 95),
-            error='--limit=N should be integer 0 < N < 95'),
+        '--limit': Or(None, And(Use(int), lambda n: 0 < n < 96),
+            error='--limit=N should be integer 0 < N < 96'),
         '--cores': Or(None, And(Use(int), lambda n: 2 < n < 9),
             error='--cores=N should be integer 3 <= N <= 8'),
         '--type': Or(None, And(str, Use(str.lower), lambda n: n in ("power", "freq")),
