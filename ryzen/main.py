@@ -24,12 +24,13 @@ from time import sleep
 import psutil
 import matplotlib.pyplot as plt
 import sys
+import math
 from docopt import docopt
 from schema import Schema, And, Or, Use, SchemaError
 from topology import cpu_tree
 from msr import AMD_MSR_CORE_ENERGY, writemsr, readmsr, get_percore_msr, get_percore_energy, get_units, setup_perf, get_package_energy
 from tracker import PerCoreTracker, update_delta, update_delta_32, update_pkg
-from frequency import keep_limit_prop_freq, keep_limit_prop_power, keep_limit, read_freq_real, set_gov_userspace, set_to_max_freq, set_per_core_freq
+from frequency import keep_limit_prop_freq, keep_limit_prop_power, reset_pstates, keep_limit, read_freq_real, set_gov_userspace, set_to_max_freq, set_per_core_freq
 from launcher import run_on_multiple_cores_forever, launch_on_core, wait_for_procs
 from operator import itemgetter
 from multiprocessing import Process
@@ -122,7 +123,7 @@ def main(arg1, energy_unit, tree):
 
     if option == "power":
         # Power shares
-        high_list, high_cores, low_list, low_cores, limits, high_limits, low_limits, high_shares, low_shares, _ = get_list_limits_cores(power_limit, cores, proc_file, opt="Power")
+        high_list, high_cores, low_list, low_cores, limits, high_limits, low_limits, high_shares, low_shares, _ = get_list_limits_cores(power_limit-10, cores, proc_file, opt="Power")
     elif option == "freq":
         # Frequency shares
         high_list, high_cores, low_list, low_cores, limits, high_limits, low_limits, high_shares, low_shares, _ = get_list_limits_cores(power_limit, cores, proc_file, opt="Freq")
@@ -188,13 +189,27 @@ def main(arg1, energy_unit, tree):
         f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
 
         if option == "power":
-
+            # Set the max limits according to actual measurement
+            # it should be minimun of the preset limit and actual power at max frequency
+            # since the first five seconds we are running at max frequency we can set from 
+            # measurement
+            if count < 5:
+                if not high_cores is None:
+                    # get power
+                    hi_pwr = [v for k, v in power_tracker.items() if k in high_cores]
+                    high_freqs = [v for k, v in f_dict.items() if k in high_cores]
+                    high_limits = [ min(y+500,x) if (math.isclose(3400, f/1000, abs_tol=25)) else x for x,y,f in zip(high_limits, hi_pwr, high_freqs)]
+                    print("Power Limits: ", high_limits)
+                if not low_cores is None:
+                    low_pwr = [v for k, v in power_tracker.items() if k in low_cores]
+                    low_freqs = [v for k, v in f_dict.items() if k in low_cores]
+                    low_limits = [ min(y+500,x) if (math.isclose(3400, f/1000, abs_tol=25)) else x for x,y,f in zip(low_limits, low_pwr, low_freqs)]
             if count > 5 and count < 30 :
                 if not high_cores is None:
                     hi_pwr = [v for k, v in power_tracker.items() if k in high_cores]
                     if first_control: 
                         high_freqs = [v for k, v in f_dict.items() if k in high_cores]
-                    print(hi_pwr)
+                    # print(hi_pwr)
                 if not low_cores is None:
                     low_pwr = [v for k, v in power_tracker.items() if k in low_cores]
                     if first_control:
@@ -240,7 +255,8 @@ def main(arg1, energy_unit, tree):
                 sum_freq = sum_freq + f_dict
                 sum_power = sum_power + power_tracker
                 sum_package = sum_package + package_pwr
-
+                print("Power Limits: ", high_limits)
+                print("High Freqs: ", high_freqs)
         elif option == "freq":
 
             if count > 5 and count < 30 :
@@ -271,7 +287,8 @@ def main(arg1, energy_unit, tree):
                 sum_package = sum_package + package_pwr
 
 
-        if count > 30:    
+        if count > 30:
+            base = 30    
             print(package_tracker)
             print(round(sum_power.scalar_div(count-base), 0))
             print(round(sum_freq.scalar_div(count-base), 0))
@@ -320,5 +337,6 @@ if __name__ == "__main__":
     setup_perf()
     energy_unit = get_units()
     set_gov_userspace()
+    reset_pstates()
     set_to_max_freq()
     main(ARGUMENTS, energy_unit, tree)
