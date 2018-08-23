@@ -4,7 +4,7 @@ import subprocess
 import time
 import math
 from collections import Counter
-from msr import update_pstate_freq, print_pstate_values
+from msr import update_pstate_freq, print_pstate_values, get_pstate_freqs
 
 TDP = 95000
 
@@ -342,81 +342,76 @@ def set_per_core_freq(freq_list, cores):
     """ Write Quantized Frequency Limits for given lists """
     bounds = get_freq_bounds()
     freqs = [quantize(f) for f in freq_list]
-    freqs_set = set(freqs)
-    freq_dict = {0:set(), 1:set(), 2:set()}
-    count_dict = {0:0, 1:0, 2:0}
+    freqs_set = set(freqs) # unique frequencies
+    freq_dict = {0:set(), 1:set(), 2:set()} # what states need to be modified
+    count_dict = {0:0, 1:0, 2:0} # How many options do we have
+    need_sep = [False, False, False] # do we have any options at all
+    
     # find seperate pstates
     for val in freqs_set:
         if val <= bounds[0]:
             count_dict[2] += 1
-            freq_dict[2].add(val)
+            freq_dict[2].add(min(val,bounds[0]))
+            if count_dict[2] > 1:
+                need_sep[2] = True
         elif val > bounds[0] and  val <= 3000000:
             count_dict[1] +=1
-            freq_dict[1].add(val)
+            freq_dict[1].add(min(val,3000000))
+            if count_dict[1] > 1:
+                need_sep[1] = True
         elif val > 3000000 and val <= bounds[1]:
             count_dict[0] +=1
-            freq_dict[0].add(val)
+            freq_dict[0].add(min(val,bounds[1]))
+            if count_dict[0] > 1:
+                need_sep[0] = True
+    print(need_sep)
     print(count_dict)
     print(freq_dict)
+    
+    # decorator adapted from https://stackoverflow.com/questions/6254871/python-minnone-x
+    skipNone = lambda a : lambda *args : a(val for val in args if val is not None)    
+    
+    # initialize bounds with 
+    new_bounds = get_pstate_freqs()
+    up_freq = [None,None,None]
+    
+    # Select three P_states
+    if need_sep[2]:
+        up_freq[2] = min(freq_dict[2])
+        up_freq[1] = max(freq_dict[2])
+        new_bounds = [skipNone(min)(up_freq[2], new_bounds[0]), skipNone(max)(up_freq[1],new_bounds[1]), skipNone(max)(up_freq[0],new_bounds[2])]
+    elif freq_dict[2] != set():
+        new_bounds[0] = freq_dict[2].pop()
+    
+    if need_sep[1]:
+        up_freq[2] = min(freq_dict[1])
+        up_freq[1] = max(freq_dict[1])
+        new_bounds = [skipNone(min)(up_freq[2], new_bounds[0]), skipNone(min)(up_freq[1], new_bounds[1]), skipNone(max)(up_freq[0],new_bounds[2])]
+    elif freq_dict[1] != set():
+        new_bounds[1] = freq_dict[1].pop()
+    
+    if need_sep[0]:
+        up_freq[1] = min(freq_dict[0])
+        up_freq[0] = max(freq_dict[0])
+        new_bounds = [skipNone(min)(up_freq[2], new_bounds[0]), skipNone(max)(up_freq[1],new_bounds[1]), skipNone(max)(up_freq[0],new_bounds[2])] 
+    elif freq_dict[0] != set():
+        new_bounds[2] = freq_dict[0].pop()
+    # Update the P-States as needed
+    for state, freq in enumerate(new_bounds[::-1]):
+        if need_sep[state]:
+            update_pstate_freq(freq, state)
+    
+    # Finally write the appropriate freq values
 
-    # figure out which ones to update
-    needSeparation = False
-    sep_key = []
-    for key, value in freq_dict.items():
-        #print(value)
-        if value != set():
-            needSeparation = needSeparation or (len(value) >= 2)
-            sep_key += [key]
-    print(len(freqs_set), freqs_set)
-    new_bounds = None
-    done = False
-    if needSeparation and len(sep_key) == 1:
-        # print(sep_key, max(freq_dict[sep_key]), min(freq_dict[sep_key]))
-        # update p-states
-        print("Updating P-States")
-        if sep_key[0] == 2 and not done:
-            update_pstate_freq(max(freq_dict[sep_key[0]]), sep_key[0]-1)
-            update_pstate_freq(min(freq_dict[sep_key[0]]), sep_key[0])
-            update_pstate_freq(3400000, 0)
-            new_bounds =[min(freq_dict[sep_key[0]]), max(freq_dict[sep_key[0]])+25000, 3400000]
-            done = True
+    print(new_bounds)
+    # print_pstate_values()
+    for i, core in enumerate(cores):
+        ryzen_write_freq(freqs[i], new_bounds, cpu=core)
+        if core % 2 == 0:
+            ryzen_write_freq(freqs[i], new_bounds, cpu=core+1)
+        else:
+            ryzen_write_freq(freqs[i], new_bounds, cpu=core-1)
 
-        if sep_key[0] == 1 and not done:
-            update_pstate_freq(max(freq_dict[sep_key[0]]), sep_key[0])
-            update_pstate_freq(min(freq_dict[sep_key[0]]), sep_key[0]+1)
-            update_pstate_freq(3400000, 0)
-            new_bounds =[min(freq_dict[sep_key[0]]), max(freq_dict[sep_key[0]])+25000, 3400000]
-            done = True
-
-        if sep_key[0] == 0 and not done:
-            update_pstate_freq(max(freq_dict[sep_key[0]]), sep_key[0])
-            update_pstate_freq(min(freq_dict[sep_key[0]]), sep_key[0]+1)
-            update_pstate_freq(2200000, 2)
-            new_bounds =[2200000,min(freq_dict[sep_key[0]]), max(freq_dict[sep_key[0]])+25000]
-            done = True
-        elif len(sep_key) > 1 and len(sep_key) < 4:
-            # Do something to find the best three states out of all possible frequencies
-            pass
-
-        # then write values
-    if new_bounds is not None:
-        print(new_bounds)
-        print_pstate_values()
-        for i, core in enumerate(cores):
-            ryzen_write_freq(freqs[i], new_bounds, cpu=core)
-            if core % 2 == 0:
-                ryzen_write_freq(freqs[i], new_bounds, cpu=core+1)
-            else:
-                ryzen_write_freq(freqs[i], new_bounds, cpu=core-1)
-    else:
-        print("updating cores: ", cores, freqs)
-        for i, core in enumerate(cores):
-            # print(i, core, quantize(freq_list[i]))
-            update_write_freq(quantize(freq_list[i]), core, update=True)
-            if core % 2 == 0:
-                update_write_freq(quantize(freq_list[i]), core+1, update=False)
-            else:
-                update_write_freq(quantize(freq_list[i]), core-1, update=False)
     return
 
 def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_shares, high_cores, low_cores, first_limit=False, lp_active=False):
@@ -426,7 +421,7 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
     max_freq = 3400000
     alpha = abs(limit-curr_power)/TDP
 
-    print(limit)
+    # print(limit)
 
     if abs(curr_power - limit) < tolerance:
         # at power limit nothing todo
@@ -491,7 +486,7 @@ def keep_limit_prop_power(curr_power, limit, hi_lims, low_lims, hi_freqs, low_fr
     # max_freq = 3400000
     alpha = abs(limit-curr_power)/TDP
 
-    print(limit, curr_power)
+    # print(limit, curr_power)
 
     if abs(curr_power - limit) < tolerance:
         # at power limit nothing todo
