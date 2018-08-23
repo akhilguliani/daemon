@@ -289,7 +289,7 @@ def main(arg1, energy_unit, tree):
 
         if count > 30:
             base = 30    
-            print(package_tracker)
+            print("Pack Power: ",package_tracker)
             print(round(sum_power.scalar_div(count-base), 0))
             print(round(sum_freq.scalar_div(count-base), 0))
             print(round(sum_perf.scalar_div(count-base), 0))
@@ -299,7 +299,7 @@ def main(arg1, energy_unit, tree):
             print(count, current_power, int(power_diff/(count-base)), int(sum_package/(count-base)), package_tracker,sep=", ")
 
         print("\n---------------")
-        print(package_tracker)
+        print("Pack Power: ", package_tracker)
         print(round(power_tracker, 3))
         print(f_dict)
         print(round(perf_delta, 3), "\n________")
