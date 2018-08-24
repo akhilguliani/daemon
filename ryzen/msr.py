@@ -108,3 +108,13 @@ def print_pstate_values():
     for i in range(3):
         pstate_val = readmsr(PSTATES[i], cpu=0)
         print(pstate2str(pstate_val))
+
+def get_pstate_freqs():
+    retval = [0,0,0]
+    for i in range(3):
+        val = readmsr(PSTATES[i], cpu=0)
+        if val & (1 << 63):
+            fid = val & 0xff
+            did = (val & 0x3f00) >> 8
+            retval[i] = (2*fid/did)*100000
+    return retval[::-1]
