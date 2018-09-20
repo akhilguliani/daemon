@@ -121,7 +121,7 @@ def main(arg1, energy_unit, tree):
 
     high_list, high_cores, low_list, low_cores, limits, high_limits, low_limits, high_shares, low_shares = [None]*9
 
-    if option == "power":
+    if option == "power" or option == "powereq":
         # Power shares
         high_list, high_cores, low_list, low_cores, limits, high_limits, low_limits, high_shares, low_shares, _ = get_list_limits_cores(power_limit-10, cores, proc_file, opt="Power")
     elif option == "freq":
@@ -257,6 +257,78 @@ def main(arg1, energy_unit, tree):
                 sum_package = sum_package + package_pwr
                 print("Power Limits: ", high_limits)
                 print("High Freqs: ", high_freqs)
+# Adding in support for equal shares 
+        elif option == "powereq":
+            # Set the max limits according to actual measurement
+            # it should be minimun of the preset limit and actual power at max frequency
+            # since the first five seconds we are running at max frequency we can set from 
+            # measurement
+            if count < 5:
+                if not high_cores is None:
+                    # get power
+                    hi_pwr = [v for k, v in power_tracker.items() if k in high_cores]
+                    high_freqs = [v for k, v in f_dict.items() if k in high_cores]
+                    high_limits = [ min(y+500,x) if (math.isclose(3400, f/1000, abs_tol=25)) else x for x,y,f in zip(high_limits, hi_pwr, high_freqs)]
+                    print("Power Limits: ", high_limits)
+                if not low_cores is None:
+                    low_pwr = [v for k, v in power_tracker.items() if k in low_cores]
+                    low_freqs = [v for k, v in f_dict.items() if k in low_cores]
+                    low_limits = [ min(y+500,x) if (math.isclose(3400, f/1000, abs_tol=25)) else x for x,y,f in zip(low_limits, low_pwr, low_freqs)]
+            if count > 5 and count < 30 :
+                if not high_cores is None:
+                    hi_pwr = [v for k, v in power_tracker.items() if k in high_cores]
+                    if first_control: 
+                        high_freqs = [v for k, v in f_dict.items() if k in high_cores]
+                    # print(hi_pwr)
+                if not low_cores is None:
+                    low_pwr = [v for k, v in power_tracker.items() if k in low_cores]
+                    if first_control:
+                        low_freqs = [v for k, v in f_dict.items() if k in low_cores]
+
+                run_lp, high_limits, low_limits, high_freqs, low_freqs = keep_limit_prop_power(package_tracker, power_limit*1000, 
+                                                                       high_limits, low_limits, 
+                                                                       high_freqs, low_freqs,
+                                                                       high_shares, low_shares, 
+                                                                       high_cores, low_cores, 
+                                                                       hi_pwr, low_pwr, 
+                                                                       first_limit=first_control, lp_active=False,
+                                                                       hi_lead=[0,4])
+                first_control = False
+                base = count
+            elif count > 30:
+                if not high_cores is None:
+                    hi_pwr = [v for k, v in power_tracker.items() if k in high_cores]
+                    if first_control: 
+                        high_freqs = [v for k, v in f_dict.items() if k in high_cores]
+                    print(hi_pwr)
+                if not low_cores is None:
+                    low_pwr = [v for k, v in power_tracker.items() if k in low_cores]
+                    if first_control:
+                        low_freqs = [v for k, v in f_dict.items() if k in low_cores]
+                # check if we have enough power for low priority
+                current_power = package_tracker
+                if first and not (low_cores is None):
+                    print("RUNNIG LOW: ", power_limit*1000 - current_power,( power_limit*1000 - current_power > 1000*len(low_cores)) )
+                    if power_limit*1000 - current_power  > 1000*len(low_cores) and run_lp:
+                        # we have excess power at a steady enough state for Low Priority
+                        wait_low_threads.start()
+                        lp_active = True
+                    first = False
+
+                run_lp, high_limits, low_limits, high_freqs, low_freqs = keep_limit_prop_power(package_tracker, power_limit*1000, 
+                                                                        high_limits, low_limits,
+                                                                        high_freqs, low_freqs, 
+                                                                        high_shares, low_shares, 
+                                                                        high_cores, low_cores, hi_pwr, low_pwr, 
+                                                                        first_limit=first_control, lp_active=lp_active,
+                                                                        hi_lead=[0,4])
+
+                sum_perf = sum_perf + perf_delta
+                sum_freq = sum_freq + f_dict
+                sum_power = sum_power + power_tracker
+                sum_package = sum_package + package_pwr
+                print("Power Limits: ", high_limits)
+                print("High Freqs: ", high_freqs)            
         elif option == "freq":
 
             if count > 5 and count < 30 :
@@ -320,7 +392,7 @@ if __name__ == "__main__":
             error='--limit=N should be integer 0 < N < 96'),
         '--cores': Or(None, And(Use(int), lambda n: 2 < n < 9),
             error='--cores=N should be integer 3 <= N <= 8'),
-        '--type': Or(None, And(str, Use(str.lower), lambda n: n in ("power", "freq")),
+        '--type': Or(None, And(str, Use(str.lower), lambda n: n in ("power", "powereq", "freq")),
             error='--type=power|freq Select share type'),
         'PID': [Or(None, And(Use(int), lambda n: 1 < n < 32768),
             error='PID should be inteager within 1 < N < 32768')],

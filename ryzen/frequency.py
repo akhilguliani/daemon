@@ -338,11 +338,16 @@ def set_per_core_freq_old(freq_list, cores):
             write_freq(quantize(freq_list[i]), core-1)
     return
 
-def set_per_core_freq(freq_list, cores):
+def set_per_core_freq(freq_list, cores, leaders=None):
     """ Write Quantized Frequency Limits for given lists """
     bounds = get_freq_bounds()
     freqs = [quantize(f) for f in freq_list]
-    freqs_set = set(freqs) # unique frequencies
+    freqs_set = set()
+    if leaders != None:
+        # hard coding leader core concept
+        freqs_set = set([freqs[i] for i in leaders])
+    else:
+        freqs_set = set(freqs) # unique frequencies
     freq_dict = {0:set(), 1:set(), 2:set()} # what states need to be modified
     count_dict = {0:0, 1:0, 2:0} # How many options do we have
     need_sep = [False, False, False] # do we have any options at all
@@ -367,9 +372,12 @@ def set_per_core_freq(freq_list, cores):
     print(need_sep)
     print(count_dict)
     print(freq_dict)
+    for key, value in freq_dict.items():
+        freq_dict[key] = set(value)
+    print(freq_dict)
     
     # decorator adapted from https://stackoverflow.com/questions/6254871/python-minnone-x
-    skipNone = lambda a : lambda *args : a(val for val in args if val is not None)    
+    skipNone = lambda fn : lambda *args : fn(val for val in args if val is not None)    
     
     # initialize bounds with 
     new_bounds = get_pstate_freqs()
@@ -476,7 +484,7 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
 
 def keep_limit_prop_power(curr_power, limit, hi_lims, low_lims, hi_freqs, low_freqs,
                           hi_shares, low_shares, high_cores, low_cores, hi_power, low_power,
-                          first_limit=False, lp_active=False):
+                          first_limit=False, lp_active=False, hi_lead=None, low_lead=None):
     """ Proportional Core Power  Power controller adapted from skylake branch
         limit is package power limit; hi_lims and low_lims are per core limits
         TODO: Extend the shares mechanism to low power apps"""
@@ -509,7 +517,7 @@ def keep_limit_prop_power(curr_power, limit, hi_lims, low_lims, hi_freqs, low_fr
                     hi_freqs = [freq_at_power(l) for l in hi_lims]
                 else:
                     hi_freqs = [get_new_freq(l,a,f,increase=True) for l,a,f in zip(hi_lims, hi_power, hi_freqs)]
-                set_per_core_freq(hi_freqs, high_cores)
+                set_per_core_freq(hi_freqs, high_cores, leaders=hi_lead)
                 # max_per_core = min(max(hi_lims), max(hi_power))
                 # detect saturation 
                 # hi_lims = [y if (math.isclose(3400, f/1000, abs_tol=25)) or (math.isclose(f/1000,800,abs_tol=25))  else x for x,y,f in zip(hi_lims, hi_power, hi_freqs)]
@@ -521,7 +529,7 @@ def keep_limit_prop_power(curr_power, limit, hi_lims, low_lims, hi_freqs, low_fr
                     extra_power = extra_power - sum(add_lo)
                     low_lims = [ min(x+y, max_per_core) for x,y in zip(add_lo, low_lims)]
                     low_freqs = [freq_at_power(l) for l in low_lims]
-                    set_per_core_freq(low_freqs, low_cores)
+                    set_per_core_freq(low_freqs, low_cores, leaders=low_lead)
                 return True, hi_lims, low_lims, hi_freqs, low_freqs
             return False, hi_lims, low_lims, hi_freqs, low_freqs
     elif (curr_power - limit) > tolerance:
@@ -536,7 +544,7 @@ def keep_limit_prop_power(curr_power, limit, hi_lims, low_lims, hi_freqs, low_fr
             extra_power = extra_power - sum(rem_lo)
             low_lims = [ y-x for x,y in zip(rem_lo, low_lims)]
             low_freqs = [freq_at_power(l) for l in low_lims]
-            set_per_core_freq(low_freqs, low_cores)
+            set_per_core_freq(low_freqs, low_cores, leaders=low_lead)
 
         # remove remaining frequency from hi power
         if not (hi_shares is None):
@@ -550,7 +558,7 @@ def keep_limit_prop_power(curr_power, limit, hi_lims, low_lims, hi_freqs, low_fr
                     hi_freqs = [freq_at_power(l) for l in hi_lims]
                 else:
                     hi_freqs = [get_new_freq(l,a,f,increase=False) for l,a,f in zip(hi_lims, hi_power, hi_freqs)]
-                set_per_core_freq(hi_freqs, high_cores)
+                set_per_core_freq(hi_freqs, high_cores, leaders=hi_lead)
                 # detect saturation
                 hi_lims = [ y if (math.isclose(3400, f/1000,abs_tol=25)) else x for x,y,f in zip(hi_lims, hi_power, hi_freqs)]
     print(hi_freqs)
