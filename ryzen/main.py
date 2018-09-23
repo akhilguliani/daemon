@@ -216,26 +216,28 @@ def main(arg1, perf_file, tree):
                 set_rapl_limit(rapl_limit)            
                 base = 10
             elif use_control:
-                run_lp, hi_freqs, low_freqs = keep_limit_prop_freq(power_tracker, power_limit, hi_freqs, low_freqs, 
-                                                    hi_shares, low_shares, high_cores, low_cores, first_limit=False, lp_active=False)
+                # run_lp, hi_freqs, low_freqs = keep_limit_prop_freq(power_tracker, power_limit, hi_freqs, low_freqs, 
+                #                                    hi_shares, low_shares, high_cores, low_cores, first_limit=False, lp_active=False)
+                run_lp = keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=True, lp_active=run_lp)
         elif not use_rapl:
             # print("Our control Loop")
             if count < 10:
-                run_lp, hi_freqs, low_freqs = keep_limit_prop_freq(power_tracker, power_limit, hi_freqs, low_freqs, 
-                                                                   hi_shares, low_shares, high_cores, low_cores, first_limit=True, lp_active=False)
+                # run_lp, hi_freqs, low_freqs = keep_limit_prop_freq(power_tracker, power_limit, hi_freqs, low_freqs, 
+                #                                                    hi_shares, low_shares, high_cores, low_cores, first_limit=True, lp_active=False)
+                run_lp = keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=True, lp_active=run_lp)
             if count == 10:
                 ## High Prio Apps Ramped up
-                # run_lp = keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=True, lp_active=run_lp)
-                run_lp, hi_freqs, low_freqs = keep_limit_prop_freq(power_tracker, power_limit, hi_freqs, low_freqs, 
-                                                                   hi_shares, low_shares, high_cores, low_cores, first_limit=True, lp_active=False)
+                run_lp = keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=True, lp_active=run_lp)
+                # run_lp, hi_freqs, low_freqs = keep_limit_prop_freq(power_tracker, power_limit, hi_freqs, low_freqs, 
+                #                                                   hi_shares, low_shares, high_cores, low_cores, first_limit=True, lp_active=False)
                 print("RUNNING LOW PRIO", run_lp)
                 if run_lp:
                     wait_low_threads.start()
                 base = count
             elif count > 10:
-                # keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=False, lp_active=run_lp)
-                _, hi_freqs, low_freqs = keep_limit_prop_freq(power_tracker, power_limit, hi_freqs, low_freqs, 
-                                                              hi_shares, low_shares, high_cores, low_cores, first_limit=False, lp_active=run_lp)
+                keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=False, lp_active=run_lp)
+                # _, hi_freqs, low_freqs = keep_limit_prop_freq(power_tracker, power_limit, hi_freqs, low_freqs, 
+                #                                               hi_shares, low_shares, high_cores, low_cores, first_limit=False, lp_active=run_lp)
                
         f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
         
