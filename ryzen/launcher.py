@@ -78,7 +78,7 @@ def run_on_core(process_info, cpu=0):
     return
 
 def wait_for_procs(procs, callback_fn):
-    gone, alive = psutil.wait_procs(procs, timeout=None, callback=callback_fn)
+    _, alive = psutil.wait_procs(procs, timeout=None, callback=callback_fn)
     for _p in alive:
         _p.kill()
 
@@ -173,7 +173,7 @@ def run_on_cores_restart2(process_info_list, copies=1, cores=None, rstrt_even=Fa
 
     def print_time(proc):
         """ Print Process Info on compeletion """
-        import copy
+        # import copy
         end_time = time()
         p_dic = proc_dict[proc.pid]
         print(p_dic['name'], p_dic['pid'], p_dic['cpu_num'], str(end_time - p_dic['create_time']))
@@ -183,7 +183,7 @@ def run_on_cores_restart2(process_info_list, copies=1, cores=None, rstrt_even=Fa
             _p_rst.start()
             restarted.append(_p_rst)
 
-    gone, alive = psutil.wait_procs(p_list, timeout=None, callback=print_time)
+    _, alive = psutil.wait_procs(p_list, timeout=None, callback=print_time)
     for _p in alive:
         _p.kill()
     if len(restarted) >= 1:
@@ -226,7 +226,7 @@ def run_on_cores_restart(process_info_list, copies=1, cores=None, rstrt_even=Fal
             _p_rst = launch_on_core_new_session(process_info_list[p_dic['cpu_num'] % num_procs], p_dic['cpu_num'])
             restarted.append(_p_rst.pid)
 
-    gone, alive = psutil.wait_procs(p_list, timeout=None, callback=print_time)
+    _, alive = psutil.wait_procs(p_list, timeout=None, callback=print_time)
     for _p in alive:
         _p.kill()
     if len(restarted) >= 1:
@@ -249,7 +249,7 @@ def run_on_multiple_cores_forever(process_info_list, cores=None):
 
     restarted = []
     for i, cpu in enumerate(cores):
-        process_info = process_info_list[i]
+        process_info = process_info_list[i % len(process_info_list)]
         _p_rst = None
         # Fixed cpu number for intel platform
         _p_rst = Process(target=run_on_core_forever, args=(process_info, cpu))

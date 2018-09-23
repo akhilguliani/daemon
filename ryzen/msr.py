@@ -57,8 +57,8 @@ def get_units():
     return energy_unit
 
 def setup_perf():
-    """ Set bits to lock TSC value and enable Instruction count MSR """
-    val = readmsr(0xC0010015,0)
+    """ Set bits to lock TSC value and enable Instruction count MSR for Ryzen"""
+    readmsr(0xC0010015,0)
     for i in range(16):
         writemsr(0xC0010015, 0x4B200011, i)
 

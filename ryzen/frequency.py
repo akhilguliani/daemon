@@ -344,6 +344,8 @@ def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limi
             # Below limit
             # We have excess power for low priority
             # Set low prio cores to lowest freq
+            if low_cpus is None:
+                return False
             for core in low_cpus:
                 write_freq(800000, cpu=core)
                 write_freq(800000, cpu=20+core)
