@@ -427,3 +427,141 @@ def setup_rapl():
     enable.write("1")
     enable.close()
     return
+
+def freq_at_perf(perf):
+    """ 
+    performance model
+    Can be made into a per application function
+    we assume perfect performance scaling in our case
+    """
+    factor = 14141.41
+    const = 7.86e5
+    if perf <= 1:
+        return 800000
+    elif perf >= 100:
+        return 2200000
+    return int(factor*perf + const)
+
+
+def perf_at_freq(freq):
+    """ 
+    performance model
+    Can be made into a per application function
+    we assume perfect performance scaling in our case
+    """
+    factor = (7.07e-5)
+    const = -55.56
+    if freq >= 2200000:
+        return 100
+    elif freq <= 800000:
+        return 1
+    return int(factor*freq + const)
+
+def get_new_freq_perf(target_perf, current_perf, old_freq, increase=False):
+    """ Update frequency based on target perf and actulal perf value per core"""
+
+    bounds = get_freq_bounds_ryzen()
+    new_freq = old_freq
+    perf_diff = abs(current_perf - target_perf)
+    step = 100000
+    direction = math.copysign(1, (target_perf - current_perf))
+   # Select the right step size
+    if perf_diff <= 6:
+        # to close better settle than oscillate
+        return new_freq
+    elif perf_diff > 6 and perf_diff <= 30:
+        step = 100000
+    elif perf_diff > 30 and perf_diff <= 60:
+        step = 200000
+    elif perf_diff > 60:
+        step = 1000000
+
+    new_freq = old_freq + direction*step
+    if new_freq >= bounds[1]:
+        # at max value
+        new_freq = bounds[1]
+    elif new_freq <= bounds[0]:
+        # at lowest
+        new_freq = bounds[0]
+
+    print("new_freq_calculator ", target_perf, new_freq, increase, perf_diff, step, direction)
+    return new_freq
+
+def keep_limit_prop_perf(curr_power, limit, hi_lims, low_lims, hi_freqs, low_freqs,
+                          hi_shares, low_shares, high_cores, low_cores, hi_perf, low_perf,
+                          first_limit=False, lp_active=False):
+    """ Proportional Core Power  Power controller adapted from skylake branch
+        limit is package power limit; hi_lims and low_lims are per core limits
+        TODO: Extend the shares mechanism to low power apps"""
+    tolerance = 250
+    max_per_core = 100
+    # max_freq = 3400000
+    alpha = abs(limit-curr_power)/TDP
+
+    if abs(curr_power - limit) < tolerance:
+        # at power limit nothing todo
+        return False, hi_lims, low_lims, hi_freqs, low_freqs
+    elif (limit - curr_power) > -1*tolerance:
+        # Below limit
+        # We have excess power
+        extra_perf = alpha * max_per_core
+        ## distribute excess power - perf among
+        # First Check if high prio apps are at max freq
+        if not (hi_shares is None):
+            shares_per_core = [hi_shares[i] if not (math.isclose(2200, hi_freqs[i]/1000, abs_tol=100)) else 0 for i in range(len(high_cores))]
+            sum_shares = sum(shares_per_core)
+            print("Below Limit", sum_shares)
+            if not math.isclose(sum_shares, 0):
+                add_hi = [(s * extra_perf / sum_shares) for s in shares_per_core]
+                extra_perf = extra_perf - sum(add_hi)
+                hi_lims = [min(x+y, max_per_core) for x,y in zip(add_hi, hi_lims)]
+                if first_limit:
+                    hi_freqs = [freq_at_perf(l) for l in hi_lims]
+                else:
+                    hi_freqs = [get_new_freq_perf(l,a,f,increase=True) for l,a,f in zip(hi_lims, hi_perf, hi_freqs)]
+                set_per_core_freq(hi_freqs, high_cores)
+                # max_per_core = min(max(hi_lims), max(hi_power))
+                # detect saturation 
+                # hi_lims = [y if (math.isclose(3400, f/1000, abs_tol=25)) or (math.isclose(f/1000,800,abs_tol=25))  else x for x,y,f in zip(hi_lims, hi_power, hi_freqs)]
+                # hi_lims = [y if (math.isclose(3400, f/1000, abs_tol=25)) else x for x,y,f in zip(hi_lims, hi_power, hi_freqs)]
+        if not first_limit:
+            if extra_perf > 2000 and lp_active:
+                if not (low_shares is None):
+                    add_lo = [s * extra_perf for s in low_shares]
+                    extra_perf = extra_perf - sum(add_lo)
+                    low_lims = [ min(x+y, max_per_core) for x,y in zip(add_lo, low_lims)]
+                    low_freqs = [freq_at_perf(l) for l in low_lims]
+                    set_per_core_freq(low_freqs, low_cores)
+                return True, hi_lims, low_lims, hi_freqs, low_freqs
+            return False, hi_lims, low_lims, hi_freqs, low_freqs
+    elif (curr_power - limit) > tolerance:
+        # Above limit
+        # We have no excess power
+        # remove extra frequency from low power first
+        print("Above Limit")
+        extra_perf = alpha * max_per_core
+
+        if lp_active and not(low_shares is None):
+            rem_lo = [s * extra_perf for s in low_shares]
+            extra_perf = extra_perf - sum(rem_lo)
+            low_lims = [ y-x for x,y in zip(rem_lo, low_lims)]
+            low_freqs = [freq_at_perf(l) for l in low_lims]
+            set_per_core_freq(low_freqs, low_cores)
+
+        # remove remaining frequency from hi power
+        if not (hi_shares is None):
+            shares_per_core = [hi_shares[i] if not (math.isclose(hi_freqs[i]/1000,800, abs_tol=100)) else 0 for i in range(len(high_cores))]
+            sum_shares = sum(shares_per_core)
+            if not math.isclose(sum_shares, 0):
+                rem_hi = [(s * extra_perf)/sum_shares for s in shares_per_core]
+                extra_perf = extra_perf - sum(rem_hi)
+                hi_lims = [ y-x for x,y in zip(rem_hi, hi_lims)]
+                if first_limit:
+                    hi_freqs = [freq_at_perf(l) for l in hi_lims]
+                else:
+                    hi_freqs = [get_new_freq_perf(l,a,f,increase=False) for l,a,f in zip(hi_lims, hi_perf, hi_freqs)]
+                set_per_core_freq(hi_freqs, high_cores)
+                # detect saturation
+                hi_lims = [ y if (math.isclose(2200, f/1000,abs_tol=100)) else x for x,y,f in zip(hi_lims, hi_perf, hi_freqs)]
+    print(hi_freqs)
+    return False, hi_lims, low_lims, hi_freqs, low_freqs

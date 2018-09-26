@@ -48,6 +48,10 @@ def parse_file(file_path):
                     prio = 20
                 local.append(prio)
                 # print(local)
+            elif count == 5:
+                # extract perf normalization value 
+                local.append(float(line.strip()))
+                # print(local)
             count += 1
     # print("__\n", retval)
     return retval
