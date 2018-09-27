@@ -17,6 +17,11 @@ def get_freq_bounds(cpu=0):
     freq_file.close()
     return bounds
 
+def get_freq_bounds_xeon(cpu=0):
+    bounds = get_freq_bounds(cpu)
+    bounds[1] = 2200000
+    return bounds
+
 def get_freq_bounds_ryzen(cpu=0):
     bounds = [800000, 3400000]
     return bounds
@@ -460,21 +465,20 @@ def perf_at_freq(freq):
 def get_new_freq_perf(target_perf, current_perf, old_freq, increase=False):
     """ Update frequency based on target perf and actulal perf value per core"""
 
-    bounds = get_freq_bounds_ryzen()
+    bounds = get_freq_bounds_xeon()
     new_freq = old_freq
     perf_diff = abs(current_perf - target_perf)
     step = 100000
     direction = math.copysign(1, (target_perf - current_perf))
+
    # Select the right step size
-    if perf_diff <= 6:
+    if perf_diff <= 1:
         # to close better settle than oscillate
         return new_freq
-    elif perf_diff > 6 and perf_diff <= 30:
+    elif perf_diff > 6 and perf_diff <= 60:
         step = 100000
-    elif perf_diff > 30 and perf_diff <= 60:
-        step = 200000
     elif perf_diff > 60:
-        step = 1000000
+        step = 200000
 
     new_freq = old_freq + direction*step
     if new_freq >= bounds[1]:
@@ -493,8 +497,9 @@ def keep_limit_prop_perf(curr_power, limit, hi_lims, low_lims, hi_freqs, low_fre
     """ Proportional Core Power  Power controller adapted from skylake branch
         limit is package power limit; hi_lims and low_lims are per core limits
         TODO: Extend the shares mechanism to low power apps"""
-    tolerance = 250
+    tolerance = 1000
     max_per_core = 100
+    min_per_core = 1
     # max_freq = 3400000
     alpha = abs(limit-curr_power)/TDP
 
@@ -538,8 +543,9 @@ def keep_limit_prop_perf(curr_power, limit, hi_lims, low_lims, hi_freqs, low_fre
         # Above limit
         # We have no excess power
         # remove extra frequency from low power first
-        print("Above Limit")
+        # print("Above Limit")
         extra_perf = alpha * max_per_core
+        print("Above Limit: ", extra_perf)
 
         if lp_active and not(low_shares is None):
             rem_lo = [s * extra_perf for s in low_shares]
@@ -555,11 +561,12 @@ def keep_limit_prop_perf(curr_power, limit, hi_lims, low_lims, hi_freqs, low_fre
             if not math.isclose(sum_shares, 0):
                 rem_hi = [(s * extra_perf)/sum_shares for s in shares_per_core]
                 extra_perf = extra_perf - sum(rem_hi)
-                hi_lims = [ y-x for x,y in zip(rem_hi, hi_lims)]
+                hi_lims = [ max(y-x, min_per_core) for x,y in zip(rem_hi, hi_lims)]
                 if first_limit:
                     hi_freqs = [freq_at_perf(l) for l in hi_lims]
                 else:
                     hi_freqs = [get_new_freq_perf(l,a,f,increase=False) for l,a,f in zip(hi_lims, hi_perf, hi_freqs)]
+                
                 set_per_core_freq(hi_freqs, high_cores)
                 # detect saturation
                 hi_lims = [ y if (math.isclose(2200, f/1000,abs_tol=100)) else x for x,y,f in zip(hi_lims, hi_perf, hi_freqs)]

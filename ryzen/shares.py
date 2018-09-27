@@ -222,7 +222,7 @@ def first_perf_allocation(power_limit, cores, app_file):
         high.sort(key=itemgetter(2))
         extra_freq, hi_limits, shares_high = allocate_shares_loop(extra_freq, high, max_per_core, min(cores, len(high)), 1)
         # WARN: Hack for fixing lower limit for frequency
-        hi_limits = [max(h, 100) for h in hi_limits] 
+        # hi_limits = [max(h, 100) for h in hi_limits] 
         print("freq left = ", extra_freq)
         high_set = (hi_limits, shares_high, high)
     
@@ -239,7 +239,7 @@ def first_perf_allocation(power_limit, cores, app_file):
             # get case for 800 MHz per avialable core
             _,lo_limits, shares_lo = allocate_shares_loop(1*cores_avil, low, max_per_core, cores_avil, 1)
             # WARN: Hack for fixing lower limit for frequency
-            lo_limits = [max(l, 1) for l in lo_limits] 
+            # lo_limits = [max(l, 1) for l in lo_limits] 
             extra_freq = None 
         low_set = (lo_limits, shares_lo, low)
 

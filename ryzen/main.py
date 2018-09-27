@@ -33,7 +33,7 @@ from topology import cpu_tree
 # from msr import writemsr, readmsr, get_percore_msr
 from tracker import PerCoreTracker
 from frequency import keep_limit_prop_freq, keep_limit_priority, read_freq_real, set_gov_userspace, set_to_max_freq, setup_rapl, set_rapl_limit
-from frequency import keep_limit_prop_perf
+from frequency import keep_limit_prop_perf, freq_at_perf
 from launcher import run_on_multiple_cores_forever, launch_on_core, wait_for_procs
 from helper import EnergyTracker
 from shares import get_list_limits, get_lists, get_list_limits_cores
@@ -170,21 +170,22 @@ def main(arg1, perf_file, tree):
     if option == "freq" :
         high_list, high_cores, low_list, low_cores, all_freqs, hi_freqs, low_freqs, hi_shares, low_shares = get_list_limits_cores(power_limit, cores, proc_file, opt="Freq")
     elif option == "prio":
-        high_list, high_cores, low_list, low_cores, all_freqs, hi_freqs, low_freqs, hi_shares, low_shares = get_list_limits_cores(power_limit, cores, proc_file, opt="Perf")
+        high_list, high_cores, low_list, low_cores, all_freqs, hi_freqs, low_freqs, hi_shares, low_shares = get_list_limits_cores(power_limit, cores, proc_file, opt="Freq")
     elif option == "perf":
-        high_list, high_cores, low_list, low_cores, all_freqs, hi_perf, low_perf, hi_shares, low_shares = get_list_limits_cores(power_limit, cores, proc_file, opt="Freq")
+        high_list, high_cores, low_list, low_cores, all_freqs, hi_perf, low_perf, hi_shares, low_shares = get_list_limits_cores(power_limit, cores, proc_file, opt="Perf")
     
     if low_list is None:
         print("Low", "None", "None")
     else:
-        low_norms = [low_list[4] for item in low_list]
+        low_norms = [item[4] for item in low_list]
         print("Low", len(low_list), low_cores, low_norms)
         
     if high_list is None:
         print("High", "None", "None")
     else:
-        high_norms = [high_list[4] for item in high_list]
+        high_norms = [item[4] for item in high_list]
         print("High", len(high_list), high_cores, high_norms)
+        print("High", hi_perf, hi_shares)
     # if limits is None:
     #     limits = [max_per_core]*cores
     # else:
@@ -200,6 +201,7 @@ def main(arg1, perf_file, tree):
     wait_high_threads.start()
     run_lp = False
     interval = int(arg1['--interval'])
+    first = True
 
     while True:
 
@@ -213,15 +215,21 @@ def main(arg1, perf_file, tree):
         if first:
             power_tracker = package_pwr
             track_perf = perf_delta
+            if option == "perf":
+                # set high freqs and low freqs for the first control loop
+                if high_cores is not None:
+                    hi_freqs = [freq_at_perf(p) for p in hi_perf]
+                if low_cores is not None:
+                    low_freqs = [freq_at_perf(p) for p in low_perf]
         else:
             # change = (abs(power_delta - power_tracker) / power_tracker).scalar_mul(100)
             power_tracker = (power_tracker)*(0.7) + (package_pwr)*(0.3)
             track_perf = track_perf.scalar_mul(0.7) + perf_delta.scalar_mul(0.3)
-        
+        # if not first:
         if high_norms is not None:
-            hi_perf_real = [track_perf[i]/norm for i,norm in zip(high_cores, high_norms)]
+            hi_perf_real = [int(100*track_perf[i]/norm) for i,norm in zip(high_cores, high_norms)]
         if low_norms is not None:
-            low_perf_real = [track_perf[i]/norm for i,norm in zip(low_cores, low_norms)]
+            low_perf_real = [int(100*track_perf[i]/norm) for i,norm in zip(low_cores, low_norms)]
 
         count = count + 1
         # for i in range(cores):
@@ -235,14 +243,16 @@ def main(arg1, perf_file, tree):
             elif use_control:
                 if option == "freq":
                     run_lp, hi_freqs, low_freqs = keep_limit_prop_freq(power_tracker, power_limit, hi_freqs, low_freqs, 
-                                                   hi_shares, low_shares, high_cores, low_cores, first_limit=False, lp_active=True)
+                                                   hi_shares, low_shares, high_cores, low_cores, first_limit=first, lp_active=True)
                 elif option == "prio":
-                    run_lp = keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=False, lp_active=True)
+                    run_lp = keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=first, lp_active=True)
                 
                 elif option == "perf":
-                    run_lp, hi_perf, low_perf, hi_freqs, low_freqs = keep_limit_prop_perf(power_tracker, power_limit, hi_perf, low_perf, hi_freqs, low_freqs,
-                          hi_shares, low_shares, high_cores, low_cores, hi_perf_real, low_perf_real,
-                          first_limit=False, lp_active=True)
+                    run_lp, hi_perf, low_perf, hi_freqs, low_freqs = keep_limit_prop_perf(power_tracker, power_limit, hi_perf,
+                                                                     low_perf, hi_freqs, low_freqs, hi_shares, low_shares, high_cores,
+                                                                     low_cores, hi_perf_real, low_perf_real,
+                                                                        first_limit=first, lp_active=True)
+                first = False
                 
                     
         elif not use_rapl:
@@ -259,18 +269,19 @@ def main(arg1, perf_file, tree):
                     run_lp, hi_perf, low_perf, hi_freqs, low_freqs  = keep_limit_prop_perf(power_tracker, power_limit, hi_perf, low_perf, hi_freqs, low_freqs,
                           hi_shares, low_shares, high_cores, low_cores, hi_perf_real, low_perf_real,
                           first_limit=True, lp_active=False)
+                first = False
             if count == 10:
                 if option == "freq":
                     run_lp, hi_freqs, low_freqs = keep_limit_prop_freq(power_tracker, power_limit, hi_freqs, low_freqs, 
-                                                  hi_shares, low_shares, high_cores, low_cores, first_limit=True, lp_active=False)
+                                                  hi_shares, low_shares, high_cores, low_cores, first_limit=first, lp_active=False)
                 
                 elif option == "prio":
-                    run_lp = keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=True, lp_active=False)
+                    run_lp = keep_limit_priority(power_tracker, power_limit, high_cores, low_cores, first_limit=first, lp_active=False)
 
                 elif option == "perf":
                     run_lp, hi_perf, low_perf, hi_freqs, low_freqs  = keep_limit_prop_perf(power_tracker, power_limit, hi_perf, low_perf, hi_freqs, low_freqs,
                           hi_shares, low_shares, high_cores, low_cores, hi_perf_real, low_perf_real,
-                          first_limit=True, lp_active=False)
+                          first_limit=first, lp_active=False)
 
                 print("RUNNING LOW PRIO:", run_lp)
                 if run_lp:

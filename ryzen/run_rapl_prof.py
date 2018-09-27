@@ -26,13 +26,17 @@ bounds = get_freq_bounds()
 cur_lim = 85
 
 cur_lim = set_rapl_limit(cur_lim)
+
 input_file = sys.argv[1]
 
-for cur_lim in [55, 50, 45, 40]:
+print("Here")
+
+for cur_lim in [55, 50, 45, 40, 85]:
     # reset to max frequency
     set_rapl_limit(cur_lim)
     cur_freq = set_to_max_freq()
-    cur_freq = set_to_freq_odd(cur_freq - 24*freq_step_size)
+    cur_freq = set_to_freq_odd(cur_freq - 5*freq_step_size)
+    print(bounds[1], cur_freq, cur_lim)
     while cur_freq >= bounds[0]:
         ## Read in the workloads and run
         cur_freq = set_to_freq_odd(cur_freq - freq_step_size)
