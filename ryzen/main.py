@@ -31,6 +31,7 @@ from topology import cpu_tree
 from msr import AMD_MSR_CORE_ENERGY, writemsr, readmsr, get_percore_msr, get_percore_energy, get_units, setup_perf, get_package_energy
 from tracker import PerCoreTracker, update_delta, update_delta_32, update_pkg
 from frequency import keep_limit_prop_freq, keep_limit_prop_power, reset_pstates, keep_limit, read_freq_real, set_gov_userspace, set_to_max_freq, set_per_core_freq
+from frequency import keep_limit_prop_perf
 from launcher import run_on_multiple_cores_forever, launch_on_core, wait_for_procs
 from operator import itemgetter
 from multiprocessing import Process
@@ -120,6 +121,7 @@ def main(arg1, energy_unit, tree):
     option = arg1['--type']
 
     high_list, high_cores, low_list, low_cores, limits, high_limits, low_limits, high_shares, low_shares = [None]*9
+    high_norms, low_norms, hi_perf, low_perf = [None]*4
 
     if option == "power" or option == "powereq":
         # Power shares
@@ -127,7 +129,10 @@ def main(arg1, energy_unit, tree):
     elif option == "freq":
         # Frequency shares
         high_list, high_cores, low_list, low_cores, limits, high_limits, low_limits, high_shares, low_shares, _ = get_list_limits_cores(power_limit, cores, proc_file, opt="Freq")
-    
+    elif option == "perf":
+        # Performance shares
+        high_list, high_cores, low_list, low_cores, limits, high_limits, low_limits, high_shares, low_shares, _ = get_list_limits_cores(power_limit, cores, proc_file, opt="Perf")
+
     wait_high_threads = Process(target=run_on_multiple_cores_forever, args=(high_list, high_cores))
     wait_low_threads = Process(target=run_on_multiple_cores_forever, args=(low_list, low_cores))
     
@@ -140,11 +145,14 @@ def main(arg1, energy_unit, tree):
         print("Low", "None", "None")
     else:
         print("Low", len(low_list), low_cores, low_limits, low_shares)
-    
+        low_norms = [item[4] for item in low_list]
+        
     if high_list is None:
         print("High", "None", "None")
     else:
         print("High", len(high_list), high_cores, high_limits, high_shares)
+        high_norms = [item[4] for item in high_list]
+        
     
     print("Limits", limits)
 
@@ -329,6 +337,7 @@ def main(arg1, energy_unit, tree):
                 sum_package = sum_package + package_pwr
                 print("Power Limits: ", high_limits)
                 print("High Freqs: ", high_freqs)            
+        
         elif option == "freq":
 
             if count > 5 and count < 30 :
@@ -358,7 +367,74 @@ def main(arg1, energy_unit, tree):
                 sum_power = sum_power + power_tracker
                 sum_package = sum_package + package_pwr
 
+        elif option == "perf":
+            # Set the max limits according to actual measurement
+            # it should be minimun of the preset limit and actual power at max frequency
+            # since the first five seconds we are running at max frequency we can set from 
+            # measurement
+            if count < 5:
+                if not high_cores is None:
+                    # get power
+                    hi_perf = [int(100*track_perf[i]/norm) for i,norm in zip(high_cores, high_norms)]
+                    high_freqs = [v for k, v in f_dict.items() if k in high_cores]
+                    print("Perf Limits: ", high_limits)
+                if not low_cores is None:
+                    low_perf = [int(100*track_perf[i]/norm) for i,norm in zip(low_cores, low_norms)]
+                    low_freqs = [v for k, v in f_dict.items() if k in low_cores]
+            if count > 5 and count < 30 :
+                if not high_cores is None:
+                    hi_perf = [int(100*track_perf[i]/norm) for i,norm in zip(high_cores, high_norms)]
+                    if first_control: 
+                        high_freqs = [v for k, v in f_dict.items() if k in high_cores]
+                    # print(hi_pwr)
+                if not low_cores is None:
+                    low_perf = [int(100*track_perf[i]/norm) for i,norm in zip(low_cores, low_norms)]
+                    if first_control:
+                        low_freqs = [v for k, v in f_dict.items() if k in low_cores]
 
+                run_lp, high_limits, low_limits, high_freqs, low_freqs = keep_limit_prop_perf(package_tracker, power_limit*1000, 
+                                                                       high_limits, low_limits, 
+                                                                       high_freqs, low_freqs,
+                                                                       high_shares, low_shares, 
+                                                                       high_cores, low_cores, 
+                                                                       hi_perf, low_perf, 
+                                                                       first_limit=first_control, lp_active=False)
+                first_control = False
+                base = count
+            elif count > 30:
+                if not high_cores is None:
+                    hi_perf = [int(100*track_perf[i]/norm) for i,norm in zip(high_cores, high_norms)]
+                    if first_control: 
+                        high_freqs = [v for k, v in f_dict.items() if k in high_cores]
+                    print(hi_pwr)
+                if not low_cores is None:
+                    low_perf = [int(100*track_perf[i]/norm) for i,norm in zip(low_cores, low_norms)]
+                    if first_control:
+                        low_freqs = [v for k, v in f_dict.items() if k in low_cores]
+                # check if we have enough power for low priority
+                current_power = package_tracker
+                if first and not (low_cores is None):
+                    print("RUNNIG LOW: ", power_limit*1000 - current_power,( power_limit*1000 - current_power > 1000*len(low_cores)) )
+                    if power_limit*1000 - current_power  > 1000*len(low_cores) and run_lp:
+                        # we have excess power at a steady enough state for Low Priority
+                        wait_low_threads.start()
+                        lp_active = True
+                    first = False
+
+                run_lp, high_limits, low_limits, high_freqs, low_freqs = keep_limit_prop_perf(package_tracker, power_limit*1000, 
+                                                                       high_limits, low_limits, 
+                                                                       high_freqs, low_freqs,
+                                                                       high_shares, low_shares, 
+                                                                       high_cores, low_cores, 
+                                                                       hi_perf, low_perf, 
+                                                                       first_limit=first_control, lp_active=False)
+                sum_perf = sum_perf + perf_delta
+                sum_freq = sum_freq + f_dict
+                sum_power = sum_power + power_tracker
+                sum_package = sum_package + package_pwr
+                print("Perf: ", hi_perf)
+                print("Perf Limits: ", high_limits)
+                print("High Freqs: ", high_freqs)
         if count > 30:
             base = 30    
             print("Pack Power: ",package_tracker)
@@ -392,8 +468,8 @@ if __name__ == "__main__":
             error='--limit=N should be integer 0 < N < 96'),
         '--cores': Or(None, And(Use(int), lambda n: 2 < n < 9),
             error='--cores=N should be integer 3 <= N <= 8'),
-        '--type': Or(None, And(str, Use(str.lower), lambda n: n in ("power", "powereq", "freq")),
-            error='--type=power|freq Select share type'),
+        '--type': Or(None, And(str, Use(str.lower), lambda n: n in ("power", "powereq", "freq", "perf")),
+            error='--type=power|freq|powereq|perf Select share type'),
         'PID': [Or(None, And(Use(int), lambda n: 1 < n < 32768),
             error='PID should be inteager within 1 < N < 32768')],
         })

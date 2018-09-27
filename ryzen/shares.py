@@ -207,6 +207,58 @@ def first_freq_allocation(power_limit, cores, app_file):
 
     return extra_freq, high_set, low_set
 
+def first_perf_allocation(power_limit, cores, app_file):
+    list_procs = parse_file(app_file)
+    list_procs.sort(key=itemgetter(3))
+    
+    high = [r for r in list_procs if r[3] < 0]
+    low = [r for r in list_procs if r[3] > 0]
+
+    TDP = 85*1000
+    alpha = 1
+    if power_limit < TDP:
+        alpha = (power_limit)/float(TDP)
+ 
+    max_per_core = 100
+    perf_limit = alpha * max_per_core * cores
+
+    high_set = None
+    low_set = None
+    extra_freq = perf_limit
+    
+    print("PERF CONFIG: ", power_limit, perf_limit, alpha, max_per_core)
+
+    if high is None:
+        # we got no High Powe applications
+        high_set = None
+        extra_freq = perf_limit
+    else:
+        high.sort(key=itemgetter(2))
+        extra_freq, hi_limits, shares_high = allocate_shares_loop(extra_freq, high, max_per_core, min(cores, len(high)), 1)
+        # WARN: Hack for fixing lower limit for frequency
+        # hi_limits = [max(h, 100) for h in hi_limits] 
+        print("freq left = ", extra_freq)
+        high_set = (hi_limits, shares_high, high)
+    
+    # First check if we have cores avialable
+    cores_avil = cores if high is None else cores-len(high)
+    
+    # if int(round(extra_pwr, 0)) > 0 and not(low is None) and cores_avil > 0:
+    if  not(low is None) and cores_avil > 0:
+        # We have power for low priority
+        low.sort(key=itemgetter(2)) 
+        if int(round(extra_freq, 0)) > 0 :  
+            extra_freq, lo_limits, shares_lo = allocate_shares_loop(extra_freq, low, max_per_core, cores_avil, 1)
+        else:
+            # get case for 800 MHz per avialable core
+            _,lo_limits, shares_lo = allocate_shares_loop(1*cores_avil, low, max_per_core, cores_avil, 1)
+            # WARN: Hack for fixing lower limit for frequency
+            # lo_limits = [max(l, 1) for l in lo_limits] 
+            extra_freq = None 
+        low_set = (lo_limits, shares_lo, low)
+
+    return extra_freq, high_set, low_set
+
 def get_list_limits_cores(power, cores, app_file, opt="Power"):
     high_set = None
     low_set = None
@@ -226,6 +278,8 @@ def get_list_limits_cores(power, cores, app_file, opt="Power"):
         __, high_set, low_set = first_freq_allocation(power, cores, app_file)
     elif opt == "Power":
         __, high_set, low_set = first_allocation(power, cores, app_file)
+    elif opt == "Perf":
+        __, high_set, low_set = first_perf_allocation(power, cores, app_file)
 
     if not high_set is None:
         #We have high_prio apps
