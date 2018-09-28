@@ -31,7 +31,7 @@ from topology import cpu_tree
 from msr import AMD_MSR_CORE_ENERGY, writemsr, readmsr, get_percore_msr, get_percore_energy, get_units, setup_perf, get_package_energy
 from tracker import PerCoreTracker, update_delta, update_delta_32, update_pkg
 from frequency import keep_limit_prop_freq, keep_limit_prop_power, reset_pstates, keep_limit, read_freq_real, set_gov_userspace, set_to_max_freq, set_per_core_freq
-from frequency import keep_limit_prop_perf
+from frequency import keep_limit_prop_perf, freq_at_perf
 from launcher import run_on_multiple_cores_forever, launch_on_core, wait_for_procs
 from operator import itemgetter
 from multiprocessing import Process
@@ -385,7 +385,8 @@ def main(arg1, energy_unit, tree):
                 if not high_cores is None:
                     hi_perf = [int(100*track_perf[i]/norm) for i,norm in zip(high_cores, high_norms)]
                     if first_control: 
-                        high_freqs = [v for k, v in f_dict.items() if k in high_cores]
+                        high_freqs = [freq_at_perf(p) for p in high_limits]
+
                     # print(hi_pwr)
                 if not low_cores is None:
                     low_perf = [int(100*track_perf[i]/norm) for i,norm in zip(low_cores, low_norms)]

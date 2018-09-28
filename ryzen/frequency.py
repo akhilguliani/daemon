@@ -84,8 +84,10 @@ def ryzen_write_freq(val, bounds, cpu=0):
         write_freq(states[2], cpu)
     return
 
-def reset_pstates():
-    states = [3400000, 3000000, 2200000]
+def reset_pstates(base=False):
+    states = [3400000, 3000000, 800000]
+    if base:
+        states = [3400000, 3000000, 2200000]
     for i,val in enumerate(states):
         update_pstate_freq(val, i)
     return
@@ -379,15 +381,17 @@ def set_per_core_freq(freq_list, cores, leaders=None):
     # decorator adapted from https://stackoverflow.com/questions/6254871/python-minnone-x
     skipNone = lambda fn : lambda *args : fn(val for val in args if val is not None)    
     
-    # initialize bounds with 
+    # initialize bounds with original values
     new_bounds = get_pstate_freqs()
     up_freq = [None,None,None]
-    
+    update_state = [False]*3
     # Select three P_states
     if need_sep[2]:
         up_freq[2] = min(freq_dict[2])
         up_freq[1] = max(freq_dict[2])
-        new_bounds = [skipNone(min)(up_freq[2], new_bounds[0]), skipNone(max)(up_freq[1],new_bounds[1]), skipNone(max)(up_freq[0],new_bounds[2])]
+        new_bounds = [skipNone(min)(up_freq[2], new_bounds[0]), skipNone(min)(up_freq[1],new_bounds[1]), skipNone(max)(up_freq[0],new_bounds[2])]
+        update_state[2] = True
+        update_state[1] = True
     elif freq_dict[2] != set():
         new_bounds[0] = freq_dict[2].pop()
     
@@ -395,6 +399,8 @@ def set_per_core_freq(freq_list, cores, leaders=None):
         up_freq[2] = min(freq_dict[1])
         up_freq[1] = max(freq_dict[1])
         new_bounds = [skipNone(min)(up_freq[2], new_bounds[0]), skipNone(min)(up_freq[1], new_bounds[1]), skipNone(max)(up_freq[0],new_bounds[2])]
+        update_state[2] = True
+        update_state[1] = True
     elif freq_dict[1] != set():
         new_bounds[1] = freq_dict[1].pop()
     
@@ -402,15 +408,16 @@ def set_per_core_freq(freq_list, cores, leaders=None):
         up_freq[1] = min(freq_dict[0])
         up_freq[0] = max(freq_dict[0])
         new_bounds = [skipNone(min)(up_freq[2], new_bounds[0]), skipNone(max)(up_freq[1],new_bounds[1]), skipNone(max)(up_freq[0],new_bounds[2])] 
+        update_state[0] = True
+        update_state[1] = True
     elif freq_dict[0] != set():
         new_bounds[2] = freq_dict[0].pop()
     # Update the P-States as needed
     for state, freq in enumerate(new_bounds[::-1]):
-        if need_sep[state]:
+        if update_state[state]:
             update_pstate_freq(freq, state)
     
     # Finally write the appropriate freq values
-
     print(new_bounds)
     # print_pstate_values()
     for i, core in enumerate(cores):
@@ -606,12 +613,12 @@ def get_new_freq_perf(target_perf, current_perf, old_freq, increase=False):
     if perf_diff <= 1:
         # to close better settle than oscillate
         return new_freq
-    elif perf_diff > 1 and perf_diff <= 20:
+    elif perf_diff > 1 and perf_diff <= 10:
         step = 25000
-    elif perf_diff > 20 and perf_diff <= 60:
-        step = 100000
-    elif perf_diff > 60:
+    elif perf_diff > 10 and perf_diff <= 50:
         step = 200000
+    elif perf_diff > 50:
+        step = 400000
 
     new_freq = old_freq + direction*step
     if new_freq >= bounds[1]:
@@ -657,7 +664,7 @@ def keep_limit_prop_perf(curr_power, limit, hi_lims, low_lims, hi_freqs, low_fre
                     hi_freqs = [freq_at_perf(l) for l in hi_lims]
                 else:
                     hi_freqs = [get_new_freq_perf(l,a,f,increase=True) for l,a,f in zip(hi_lims, hi_perf, hi_freqs)]
-                set_per_core_freq(hi_freqs, high_cores)
+                set_per_core_freq(hi_freqs, high_cores, leaders=[0,4])
                 # max_per_core = min(max(hi_lims), max(hi_power))
                 # detect saturation 
                 # hi_lims = [y if (math.isclose(3400, f/1000, abs_tol=25)) or (math.isclose(f/1000,800,abs_tol=25))  else x for x,y,f in zip(hi_lims, hi_power, hi_freqs)]
@@ -700,7 +707,7 @@ def keep_limit_prop_perf(curr_power, limit, hi_lims, low_lims, hi_freqs, low_fre
                 else:
                     hi_freqs = [get_new_freq_perf(l,a,f,increase=False) for l,a,f in zip(hi_lims, hi_perf, hi_freqs)]
                 
-                set_per_core_freq(hi_freqs, high_cores)
+                set_per_core_freq(hi_freqs, high_cores, leaders=[0,4])
                 # detect saturation
                 hi_lims = [ y if (math.isclose(3400, f/1000,abs_tol=25)) else x for x,y,f in zip(hi_lims, hi_perf, hi_freqs)]
     print(hi_freqs)

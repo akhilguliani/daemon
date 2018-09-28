@@ -216,8 +216,8 @@ def first_perf_allocation(power_limit, cores, app_file):
 
     TDP = 85*1000
     alpha = 1
-    if power_limit < TDP:
-        alpha = (power_limit)/float(TDP)
+    if power_limit*1000 < TDP:
+        alpha = (power_limit*1000)/float(TDP)
  
     max_per_core = 100
     perf_limit = alpha * max_per_core * cores
@@ -226,7 +226,7 @@ def first_perf_allocation(power_limit, cores, app_file):
     low_set = None
     extra_freq = perf_limit
     
-    print("PERF CONFIG: ", power_limit, perf_limit, alpha, max_per_core)
+    print("PERF CONFIG: ", power_limit*1000, perf_limit, alpha, max_per_core)
 
     if high is None:
         # we got no High Powe applications
