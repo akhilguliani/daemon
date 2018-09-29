@@ -488,6 +488,37 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
 
     return False, hi_freqs, low_freqs
 
+def prop_share_redist(shares,freqs,cores,extra_power,lims,power,max_per_core,first_limit=False, above=False):
+    """ Propshare redistribution formulae"""
+    shares_per_core = None
+    if above:
+        shares_per_core = [shares[i] if not (math.isclose(freqs[i]/1000,800, abs_tol=25)) else 0 for i in range(len(cores))]
+    else:
+        shares_per_core = [shares[i] if not (math.isclose(3400, freqs[i]/1000, abs_tol=25)) else 0 for i in range(len(cores))]
+    
+    sum_shares = sum(shares_per_core)
+    if not above:
+        print("Below Limit", sum_shares)
+    else:
+        print("Above Limit", sum_shares)
+        
+    if not math.isclose(sum_shares, 0):
+        add_hi = [(s * extra_power / sum_shares) for s in shares_per_core]
+        extra_power = extra_power - sum(add_hi)
+        if above:
+            lims = [max(y-x, 0) for x,y in zip(add_hi, lims)]
+            if first_limit:
+                freqs = [freq_at_power(l) for l in lims]
+            else:
+                freqs = [get_new_freq(l,a,f,increase=False) for l,a,f in zip(lims, power, freqs)]
+        else:
+            lims = [min(x+y, max_per_core) for x,y in zip(add_hi, lims)]
+            if first_limit:
+                freqs = [freq_at_power(l) for l in lims]
+            else:
+                freqs = [get_new_freq(l,a,f,increase=True) for l,a,f in zip(lims, power, freqs)]
+    return freqs,extra_power,lims
+
 
 def keep_limit_prop_power(curr_power, limit, hi_lims, low_lims, hi_freqs, low_freqs,
                           hi_shares, low_shares, high_cores, low_cores, hi_power, low_power,
@@ -530,12 +561,12 @@ def keep_limit_prop_power(curr_power, limit, hi_lims, low_lims, hi_freqs, low_fr
                 # hi_lims = [y if (math.isclose(3400, f/1000, abs_tol=25)) or (math.isclose(f/1000,800,abs_tol=25))  else x for x,y,f in zip(hi_lims, hi_power, hi_freqs)]
                 # hi_lims = [y if (math.isclose(3400, f/1000, abs_tol=25)) else x for x,y,f in zip(hi_lims, hi_power, hi_freqs)]
         if not first_limit:
-            if extra_power > 2000 and lp_active:
-                if not (low_shares is None):
-                    add_lo = [s * extra_power for s in low_shares]
-                    extra_power = extra_power - sum(add_lo)
-                    low_lims = [ min(x+y, max_per_core) for x,y in zip(add_lo, low_lims)]
-                    low_freqs = [freq_at_power(l) for l in low_lims]
+            print("Extra Power: ", extra_power)
+            if extra_power > 500:               
+                if (not (low_shares is None)) and lp_active:
+                    low_freqs, extra_power, low_lims = prop_share_redist(low_shares,low_freqs,low_cores,
+                                                                          extra_power,low_lims,low_power,max_per_core,
+                                                                          first_limit=first_limit, above=False)
                     set_per_core_freq(low_freqs, low_cores, leaders=low_lead)
                 return True, hi_lims, low_lims, hi_freqs, low_freqs
             return False, hi_lims, low_lims, hi_freqs, low_freqs
@@ -547,11 +578,13 @@ def keep_limit_prop_power(curr_power, limit, hi_lims, low_lims, hi_freqs, low_fr
         extra_power = alpha * max_per_core
 
         if lp_active and not(low_shares is None):
-            rem_lo = [s * extra_power for s in low_shares]
-            extra_power = extra_power - sum(rem_lo)
-            low_lims = [ y-x for x,y in zip(rem_lo, low_lims)]
-            low_freqs = [freq_at_power(l) for l in low_lims]
+            
+            low_freqs, extra_power, low_lims = prop_share_redist(low_shares,low_freqs,low_cores,
+                                                        extra_power,low_lims,low_power,max_per_core,
+                                                        first_limit=first_limit, above=True)
             set_per_core_freq(low_freqs, low_cores, leaders=low_lead)
+            # detect saturation
+            low_lims = [ y if (math.isclose(3400, f/1000,abs_tol=25)) else x for x,y,f in zip(low_lims, low_power, low_freqs)]
 
         # remove remaining frequency from hi power
         if not (hi_shares is None):
