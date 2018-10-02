@@ -389,7 +389,7 @@ def keep_limit_priority(curr_power, limit, high_cpus=[], low_cpus=[], first_limi
         elif (curr_power - limit) > tolerance:
             # Above limit
             # We have no excess power
-            if lp_active:
+            if lp_active and not(low_cpus is None):
                 for core in low_cpus:
                     curr_freq = int(read_freq(cpu=core))
                     if curr_freq < bounds[1]:
@@ -513,7 +513,7 @@ def keep_limit_prop_perf(curr_power, limit, hi_lims, low_lims, hi_freqs, low_fre
         ## distribute excess power - perf among
         # First Check if high prio apps are at max freq
         if not (hi_shares is None):
-            shares_per_core = [hi_shares[i] if not (math.isclose(2200, hi_freqs[i]/1000, abs_tol=100)) else 0 for i in range(len(high_cores))]
+            shares_per_core = [hi_shares[i] if not (math.isclose(2200, hi_freqs[i]/1000, abs_tol=50)) else 0 for i in range(len(high_cores))]
             sum_shares = sum(shares_per_core)
             print("Below Limit", sum_shares)
             if not math.isclose(sum_shares, 0):

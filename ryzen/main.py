@@ -231,6 +231,8 @@ def main(arg1, perf_file, tree):
         if low_norms is not None:
             low_perf_real = [int(100*track_perf[i]/norm) for i,norm in zip(low_cores, low_norms)]
 
+        f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
+        
         count = count + 1
         # for i in range(cores):
         #     pass
@@ -300,8 +302,6 @@ def main(arg1, perf_file, tree):
                     _, hi_perf, low_perf, hi_freqs, low_freqs = keep_limit_prop_perf(power_tracker, power_limit, hi_perf, low_perf, hi_freqs, low_freqs,
                           hi_shares, low_shares, high_cores, low_cores, hi_perf_real, low_perf_real,
                           first_limit=False, lp_active=run_lp)
-
-        f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
         
         if count > 10:
         
