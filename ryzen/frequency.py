@@ -280,7 +280,7 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
     # old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first)
     tolerance = 200
     max_per_core = max(hi_freqs)
-    max_freq = 2200000
+    max_freq = 2500000
     alpha = abs(limit-curr_power)/TDP
  
     if abs(curr_power - limit) < tolerance:
@@ -293,7 +293,7 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
         ## distribute excess power - frequency among 
         # First Check if high power apps are at max freq
         if not (hi_shares is None):
-            shares_per_core = [hi_shares[i] if not (math.isclose(hi_freqs[i],3400000,rel_tol=0.001)) else 0 for i in range(len(high_cores))]
+            shares_per_core = [hi_shares[i] if not (math.isclose(hi_freqs[i],max_freq,rel_tol=0.001)) else 0 for i in range(len(high_cores))]
             sum_shares = sum(shares_per_core)
             if not math.isclose(sum_shares, 0):
                 add_hi = [(s * extra_freq / sum_shares) for s in shares_per_core]
@@ -326,7 +326,7 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
             shares_per_core = [hi_shares[i] if not (math.isclose(hi_freqs[i],800000,rel_tol=0.05)) else 0 for i in range(len(high_cores))]
             sum_shares = sum(shares_per_core)
             if not math.isclose(sum_shares, 0):
-                rem_hi = [(s * extra_freq)/sum_shares for s in shares_per_core]
+                rem_hi = [((sum_shares/s) * extra_freq) if s != 0 else 0 for s in shares_per_core]
                 extra_freq = extra_freq - sum(rem_hi)
                 hi_freqs = [ y-x for x,y in zip(rem_hi, hi_freqs)]
                 set_per_core_freq(hi_freqs, high_cores)
