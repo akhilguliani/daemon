@@ -118,7 +118,10 @@ class EnergyTracker:
         # ensure latest value is updated
         self.update()
         # return power value in milliwats
-        return (self.energy-prev_energy)/(interval*self.MILLI)
+        if interval >= 1:
+            return (self.energy-prev_energy)/(interval*self.MILLI)
+        else:
+            return (self.energy-prev_energy)/((interval*self.MILLI)*10)
 
     def get_diff(self,prev_energy):
         self.update()

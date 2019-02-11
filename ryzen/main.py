@@ -191,16 +191,19 @@ def main(arg1, perf_file, tree):
     # else:
     #     cores = len(limits)
 
-    wait_high_threads = Process(target=run_on_multiple_cores_forever, args=(high_list, high_cores))
-    wait_low_threads = Process(target=run_on_multiple_cores_forever, args=(low_list, low_cores))
+# Commenting out to test
+###    wait_high_threads = Process(target=run_on_multiple_cores_forever, args=(high_list, high_cores))
+###    wait_low_threads = Process(target=run_on_multiple_cores_forever, args=(low_list, low_cores))
+
     # change = PerCoreTracker()
 #    limits = [5000, 8000, 6000, 10000]
 #    wait_thread = Process(target=launch_all, args=(high,))
 
 #    wait_thread = Process(target=launch_all_with_post_fn, args=(high, exit_when_done))
-    wait_high_threads.start()
+
+###    wait_high_threads.start()
     run_lp = False
-    interval = int(arg1['--interval'])
+    interval = float(arg1['--interval'])
     first = True
 
     while True:
@@ -333,8 +336,8 @@ if __name__ == "__main__":
     SCHEMA = Schema({
         '--input': Or(None, And(Use(open,
                                     error='input FILE should be readable'))),
-        '--interval': Or(None, And(Use(int), lambda n: 0 < n < 1000),
-                         error='--interval=N should be integer 0 < N < 1000'),
+        '--interval': Or(None, And(Use(float), lambda n: 0. < n < 10),
+                         error='--interval=N should be float 0.2 < N < 10'),
         '--limit': Or(None, And(Use(int), lambda n: 25 < n < 86),
                       error='--limit=N should be integer 30 < limit < 85'),
         '--cores': Or(None, And(Use(int), lambda n: 0 < n < 11),

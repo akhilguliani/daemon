@@ -278,8 +278,8 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
     ###### We also reduce the shares by the threshold delta (this way all apps get throttled eventually, and proportionally)
     ######## We continue with this trend till the power drops below limit or we reach
     # old_freq[i] = keep_limit(power_tracker[cpus[i]], limits[i], cpus[i], old_freq[i], first)
-    tolerance = 200
-    max_per_core = max(hi_freqs)
+    tolerance = 1000
+    max_per_core = max( (0 if hi_freqs is None else max(hi_freqs)) , (0 if low_freqs is None else max(low_freqs) ))
     max_freq = 2500000
     alpha = abs(limit-curr_power)/TDP
  
@@ -289,7 +289,7 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
     elif (limit - curr_power) > -1*tolerance:
         # Below limit
         # We have excess power
-        extra_freq = alpha * max_per_core
+        extra_freq = alpha * max_per_core * ((0 if high_cores is None else len(high_cores))+ (0 if low_cores is None else len(low_cores)))
         ## distribute excess power - frequency among 
         # First Check if high power apps are at max freq
         if not (hi_shares is None):
@@ -323,7 +323,7 @@ def keep_limit_prop_freq(curr_power, limit, hi_freqs, low_freqs, hi_shares, low_
 
         # remove remaining frequency from hi power
         if not (hi_shares is None):
-            shares_per_core = [hi_shares[i] if not (math.isclose(hi_freqs[i],800000,rel_tol=0.05)) else 0 for i in range(len(high_cores))]
+            shares_per_core = [hi_shares[i] if not (math.isclose(hi_freqs[i],800000,rel_tol=0.001)) else 0 for i in range(len(high_cores))]
             sum_shares = sum(shares_per_core)
             if not math.isclose(sum_shares, 0):
                 rem_hi = [((sum_shares/s) * extra_freq) if s != 0 else 0 for s in shares_per_core]
