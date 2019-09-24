@@ -1,5 +1,4 @@
-# daemon
-Power Management Daemon
+## Power Management Daemon
 
 This repository includes utilities I built to perform experiments for [Per-application power delivery published in Eurosys 2019](http://pages.cs.wisc.edu/~swift/papers/eurosys19-power.pdf).
 
