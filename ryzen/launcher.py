@@ -65,6 +65,16 @@ def launch_on_core(process_info, cpu=0):
     ret.nice(process_info[3]) # if we need to add priorities
     return ret
 
+
+def launch_on_multiple_cores(process_info, cpus=[0]):
+    """ Take the output from parse_file and launch the process with affinity to cores=[cpus] """
+    pcwd = process_info[0]
+    pargs = process_info[1]
+    ret = psutil.Popen(args=pargs, cwd=pcwd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    ret.cpu_affinity(cpus)
+    ret.nice(process_info[3]) # if we need to add priorities
+    return ret
+
 def run_on_core(process_info, cpu=0):
     """ Take the output from parse_file and launch the process on a core=cpu """
     p = launch_on_core(process_info, cpu)
@@ -80,6 +90,23 @@ def run_on_core(process_info, cpu=0):
 
     psutil.wait_procs([p], timeout=None, callback=print_time)
     return
+
+def run_on_multiple_cores(process_info, cpus=[i for i in range(8)]):
+    """ Take the output from parse_file and launch the process on a cores=[cpus] """
+    p = launch_on_multiple_cores(process_info, cpus)
+    p_dict_loc = p.as_dict()
+    proc_dict = {}
+    proc_dict[p_dict_loc['pid']] = p_dict_loc
+
+    def print_time(proc):
+        """ Print Process Info on compeletion """
+        end_time = time()
+        p_dic = proc_dict[proc.pid]
+        print(p_dic['name'], p_dic['pid'], p_dic['cpu_num'], str(end_time - p_dic['create_time']))
+
+    psutil.wait_procs([p], timeout=None, callback=print_time)
+    return
+
 
 def wait_for_procs(procs, callback_fn):
     gone, alive = psutil.wait_procs(procs, timeout=None, callback=callback_fn)
