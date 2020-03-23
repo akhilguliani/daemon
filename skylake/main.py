@@ -146,6 +146,7 @@ def main(arg1, perf_file, tree):
 
     sum_freq = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
     sum_perf = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
+    perf_rate = PerCoreTracker(dict(zip(cpus, [0 for i in cpus])))
     sum_power = 0
     sum_diff = 0
 
@@ -218,6 +219,7 @@ def main(arg1, perf_file, tree):
         if first:
             power_tracker = package_pwr
             track_perf = perf_delta
+            perf_rate = perf_delta
             if option == "perf":
                 # set high freqs and low freqs for the first control loop
                 if high_cores is not None:
@@ -230,9 +232,11 @@ def main(arg1, perf_file, tree):
             track_perf = track_perf.scalar_mul(0.7) + perf_delta.scalar_mul(0.3)
         # if not first:
         if high_norms is not None:
-            hi_perf_real = [int(100*track_perf[i]/norm) for i,norm in zip(high_cores, high_norms)]
+            hi_perf_real = [int(100*perf_rate[i]/norm) for i,norm in zip(high_cores, high_norms)]
+            # hi_perf_real = [int(100*track_perf[i]/norm) for i,norm in zip(high_cores, high_norms)]
         if low_norms is not None:
-            low_perf_real = [int(100*track_perf[i]/norm) for i,norm in zip(low_cores, low_norms)]
+            low_perf_real = [int(100*perf_rate[i]/norm) for i,norm in zip(low_cores, low_norms)]
+            # low_perf_real = [int(100*track_perf[i]/norm) for i,norm in zip(low_cores, low_norms)]
 
         f_dict = PerCoreTracker(dict(zip(cpus, [read_freq_real(cpu=i) for i in cpus])))
         
@@ -312,10 +316,13 @@ def main(arg1, perf_file, tree):
             sum_freq = sum_freq + f_dict
             sum_power = sum_power + power_tracker
             sum_diff = sum_diff + (power_limit - power_tracker)
-
+            
+            perf_rate = round(sum_perf.scalar_div(count-base), 0)
+              
             print(round(sum_power/(count-base), 0))
             print(round(sum_freq.scalar_div(count-base), 0))
-            print(round(sum_perf.scalar_div(count-base), 0))
+            print(perf_rate)
+            print(hi_perf_real)
             print(count, power_limit , sum_diff/(count-base), power_tracker, sep=", ")
 
         print("---------------")
