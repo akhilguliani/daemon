@@ -10,7 +10,7 @@ AMD_MSR_PACKAGE_ENERGY = 0xC001029B
 PSTATES = range(0xC0010064, 0xC001006C)
 
 def writemsr(msr, val, cpu=-1):
-    """ Function for writing to an msr register """
+    """ Function for writing to a msr register """
     try:
         if cpu == -1:
             for cpu_msr in glob.glob('/dev/cpu/[0-9]*/msr'):
@@ -27,7 +27,7 @@ def writemsr(msr, val, cpu=-1):
         raise OSError("msr module not loaded (run modprobe msr)")
 
 def readmsr(msr, cpu=0):
-    """ function for readin an msr register """
+    """ function for reading a msr register """
     try:
         file_id = os.open('/dev/cpu/%d/msr' % cpu, os.O_RDONLY)
         os.lseek(file_id, msr, os.SEEK_SET)
@@ -50,7 +50,7 @@ def get_package_energy():
     return readmsr(AMD_MSR_PACKAGE_ENERGY, 0) & 0xFFFFFFFF
 
 def get_units():
-    """ Get the various units for Power Units MSR """
+    """ Get the various units from Power Units MSR """
     result = readmsr(AMD_MSR_PWR_UNIT, 0)
     power_unit = 0.5 ** (result & 0xF)
     energy_unit = 0.5 **  ((result >> 8) & 0x1F)
@@ -82,6 +82,7 @@ def pstate2str(val):
         return "Disabled"
 
 def setbits(val, base, length, new):
+    """ Set particular bits, used to update particular fields in MSR values"""
     return (val ^ (val & ((2 ** length - 1) << base))) + (new << base)
 
 def setfid(val, new):
@@ -91,10 +92,12 @@ def setdid(val, new):
     return setbits(val, 8, 6, new)
 
 def freq_to_multiplier(frequency):
+    """ Convert frequency to FID and DID values """
     ratio = frequency/100000.
     return int(ratio*4) , 8
 
 def update_pstate_freq(freq, state):
+    """ Set pstate to freq value provided """
     pstate_val = readmsr(PSTATES[state], cpu=0)
     fid, did = freq_to_multiplier(freq)
     pstate_val = setfid(pstate_val, fid)
@@ -104,12 +107,13 @@ def update_pstate_freq(freq, state):
 
 
 def print_pstate_values():
-    """ Debug function to read pstate configs"""
+    """ Debug function to read pstate configs """
     for i in range(3):
         pstate_val = readmsr(PSTATES[i], cpu=0)
         print(pstate2str(pstate_val))
 
 def get_pstate_freqs():
+    """ Get current Freq values from pstate configs MSR"""
     retval = [0,0,0]
     for i in range(3):
         val = readmsr(PSTATES[i], cpu=0)
