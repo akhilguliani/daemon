@@ -1,4 +1,13 @@
 
+"""
+Name: msr.py
+Author:  Akhil Guliani
+
+Helper function to interact with x86 CPU's Model Specific Registers in Linux
+readmsr and writemsr and generic fuvntions and are compatible with all vendors
+The rest of the fuctions are specifc to the AMD Ryzen family of processors
+"""
+
 import struct
 import os
 import glob
